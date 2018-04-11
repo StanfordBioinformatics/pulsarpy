@@ -1,6 +1,0 @@
-2018-04-09 23:06:46,427:debug:	Connecting to www.encodeproject.org
-2018-04-09 23:06:46,427:debug:	Searching DCC with query https://www.encodeproject.org/search/?limit=all&type=Biosample.
-2018-04-09 23:07:03,632:debug:	Connecting to www.encodeproject.org
-2018-04-09 23:07:03,633:debug:	Searching DCC with query https://www.encodeproject.org/search/?limit=all&type=Biosample.
-2018-04-09 23:07:16,786:debug:	Connecting to www.encodeproject.org
-2018-04-09 23:07:16,787:debug:	Searching DCC with query https://www.encodeproject.org/search/?award.rfa=ENCODE4&biosample_type=tissue&lab.title=Michael+Snyder%2C+Stanford&limit=all&type=Biosample.
