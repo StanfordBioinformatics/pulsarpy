@@ -100,9 +100,10 @@ class Model(metaclass=Meta):
             `None`: If the API call didnt' return any results.
         """
         url = os.path.join(cls.URL, "find_by")
-        print(url)
-        res = requests.post(url=url, data=json.dumps(params), headers=cls.HEADERS, verify=False)
-        return res.json()
+        res = requests.get(url=url, params=params, headers=cls.HEADERS, verify=False)
+        #return res.json
+        cls.write_response_html_to_file(res,"bob.html")
+        return res
 
     @classmethod
     def get(cls, uid):
@@ -110,7 +111,7 @@ class Model(metaclass=Meta):
         Function : Fetches a record by the records ID.
         Args     : uid - The database identifier of the record to fetch. Will be converted to a string.
         """
-        url = cls.record_url(uid)
+
         res = requests.get(url=url, headers=cls.HEADERS, verify=False)
         return res.json()
 
@@ -137,6 +138,21 @@ class Model(metaclass=Meta):
         if not cls.MODEL_NAME in data:
             data = {cls.MODEL_NAME: data}
         return requests.post(url=cls.URL, data=json.dumps(data), headers=cls.HEADERS, verify=False)
+
+    @classmethod
+    def write_response_html_to_file(cls,response,filename):
+        """
+        An aid in troubleshooting internal application errors, i.e.  <Response [500]>, to be mainly
+        beneficial when developing the server-side API. This method will write the response HTML
+        for viewing the error details in the browesr.
+      
+        Args:
+            response: `requests.models.Response` instance. 
+            filename: `str`. The output file name. 
+        """
+        fout = open(filename,'w')
+        fout.write(response.text)
+        fout.close()
 
 
 class Antibody(Model):
