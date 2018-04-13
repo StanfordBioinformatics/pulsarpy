@@ -129,11 +129,10 @@ class Model(metaclass=Meta):
         """
         url = os.path.join(cls.URL, "find_by")
         payload = cls.add_model_name_to_payload(payload)
-        print("Searching {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
+        print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
         res = requests.post(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
-        #return res.json
-        cls.write_response_html_to_file(res,"bob.html")
-        return res
+        return res.json()
+        #cls.write_response_html_to_file(res,"bob.html")
 
     @classmethod
     def get(cls, uid):
@@ -227,11 +226,9 @@ class TreatmentTermName(Model):
 
 if __name__ == "__main__":
     # pdb.set_trace()
-    b = Biosample()
-    pdb.set_trace()
+    #b = Biosample()
     res = b.get(uid=1716)
     #res = b.patch(uid=1772,payload={"name": "bobq_a"})
     #res = b.delete(uid=1719)
     #c = ConstructTag()
     #res = c.post(payload={"name": "howdy there partner"})
-    pdb.set_trace()
