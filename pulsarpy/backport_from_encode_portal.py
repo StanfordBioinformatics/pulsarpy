@@ -20,6 +20,8 @@ protocol_regx = re.compile(r'protocol', re.IGNORECASE)
 UPSTREAM_PROP = "upstream_identifier"
 ENC_CONN = euc.Connection("prod")
 
+# Biosamples to import for Jessika:
+# https://www.encodeproject.org/search/?type=Biosample&lab.title=Michael+Snyder%2C+Stanford&award.rfa=ENCODE4&biosample_type=tissue
 
 def biosample_term_name(biosample_term_name, biosample_term_id):
     """
@@ -33,6 +35,10 @@ def biosample_term_name(biosample_term_name, biosample_term_id):
     Args:
         biosample_term_id: `str`. The value of a biosample's 'biosample_term_id' property on the Portal. 
         biosample_term_name: `str`. The value of a biosample's 'biosample_term_name' property on the Portal. 
+
+    Returns:
+        `dict`: The JSON representation of the existing BiosampleTermName if it already exists in
+        in Pulsar, otherwise the POST response.  
     """
     payload = {}
     payload["name"] = biosample_term_name
@@ -42,12 +48,18 @@ def biosample_term_name(biosample_term_name, biosample_term_id):
         return pulsar_rec
     return models.BiosampleTermName.post(payload)
 
+
+
 def document(rec_id): 
     """
     Example document: https://www.encodeproject.org/documents/716003cd-3ce7-41ce-b1e3-6f203b6632a0/?format=json
 
     Args:
         rec_id: `str`. An identifier for a document record on the ENCODE Portal. 
+
+    Returns:
+        `dict`: The JSON representation of the existing Document if it already exists in
+        in Pulsar, otherwise the POST response.  
     """
     raise Exception("Due to a bug in the ENCODE Portal, can't fetch document '{}' via the REST API.".format(rec))
     rec = ENC_CONN.get(rec_id, ignore404=False)
@@ -66,6 +78,28 @@ def document(rec_id):
         protocol = True
     payload["is_protocol"] = protocol
 
+def donor(rec_id):
+    """
+    The record will be checked for existence in Pulsar by doing a search on the field
+    `donor.upstread_identifer`` using as a query value the record's accession on the ENCODE Portal, 
+    and also its first alias.
+
+    Args:
+        rec_id: `str`. An identifier (alias or uuid) for a donor record on the ENCODE Portal. 
+
+    Returns:
+        `dict`: The JSON representation of the existing Donor if it already exists in
+        in Pulsar, otherwise the POST response.  
+    """
+    rec = ENC_CONN.get(rec_id, ignore404=False)
+    payload = {}
+    #check if upstream exists already in Pulsar:
+    accession = rec["accession"]
+    alias = rec["aliases"][0]
+    pulsar_rec = models.Treatment.find_by({UPSTREAM_PROP: upstream})
+    if pulsar_rec:
+        return pulsar_rec 
+
 def treatment(rec_id):
     """
     The required properties in the ENCODE Portal are:
@@ -73,10 +107,14 @@ def treatment(rec_id):
     1. treatment_term_name, 
     2. treatment_type. 
 
+    An example on the Portal: https://www.encodeproject.org/treatments/933a1ff2-43a2-4a54-9c87-aad228d0033e/.
+
     Args:
         rec_id: `str`. An identifier (alias or uuid) for a treatment record on the ENCODE Portal. 
 
-    Example on the Portal: https://www.encodeproject.org/treatments/933a1ff2-43a2-4a54-9c87-aad228d0033e/.
+    Returns:
+        `dict`: The JSON representation of the existing Treatment if it already exists in
+        in Pulsar, otherwise the POST response.  
     """
     rec = ENC_CONN.get(rec_id, ignore404=False)
     payload = {}
@@ -133,6 +171,10 @@ def treatment_term_name(treatment_term_name, treatment_term_id):
     Args:
         treatment_term_id: `str`. The value of a treatment's 'treatment_term_id' property on the Portal. 
         treatment_term_name: `str`. The value of a treatment's 'treatment_term_name' property on the Portal. 
+
+    Returns:
+        `dict`: The JSON representation of the existing TreatmentTermName if it already exists in
+        in Pulsar, otherwise the POST response.  
     """
     payload = {}
     payload["name"] = treatment_term_name

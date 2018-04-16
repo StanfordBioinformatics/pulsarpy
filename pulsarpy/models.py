@@ -116,7 +116,11 @@ class Model(metaclass=Meta):
     @classmethod
     def find_by(cls, payload):
         """
-        Implements a Railsy way of looking for a record using a method by the same name. 
+        Searches the model in question by AND joining the query parameters.
+
+        Implements a Railsy way of looking for a record using a method by the same name and passing
+        in the query as a dict. as well. 
+
         Only the first hit is returned, and there is not particular ordering specified in the server-side
         API method. 
 
@@ -133,6 +137,32 @@ class Model(metaclass=Meta):
         res = requests.post(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
         return res.json()
         #cls.write_response_html_to_file(res,"bob.html")
+
+    @classmethod
+    def find_by_or(cls, payload):
+        """
+        Searches the model in question by OR joining the query parameters.
+
+        Implements a Railsy way of looking for a record using a method by the same name and passing
+        in the query as a string (for the OR operator joining to be specified).
+
+        Only the first hit is returned, and there is not particular ordering specified in the server-side
+        API method. 
+
+        Args:
+            payload: `dict`. The attributes of a record to search for by using OR operator joining
+                for each query parameter. 
+
+        Returns:
+            `dict`: The JSON serialization of the record, if any, found by the API call.
+            `None`: If the API call didnt' return any results.
+        """
+        url = os.path.join(cls.URL, "find_by_or")
+        payload = cls.add_model_name_to_payload(payload)
+        print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
+        res = requests.post(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
+        cls.write_response_html_to_file(res,"bob.html")
+        return res.json()
 
     @classmethod
     def get(cls, uid):
@@ -213,6 +243,8 @@ class ConcentrationUnit(Model):
 class ConstructTag(Model):
     MODEL_NAME = "construct_tag"
 
+class Donor(Model):
+    MODEL_NAME = "donor"
 
 class Document(Model):
     MODEL_NAME = "document"
