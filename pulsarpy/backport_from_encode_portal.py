@@ -43,6 +43,7 @@ def biosample_term_name(biosample_term_name, biosample_term_id):
     payload = {}
     payload["name"] = biosample_term_name
     payload["accession"] = biosample_term_id
+    # Check if upstream exists already in Pulsar:
     pulsar_rec = models.BiosampleTermName.find_by({"accession": biosample_term_id})
     if pulsar_rec:
         return pulsar_rec
@@ -52,7 +53,11 @@ def biosample_term_name(biosample_term_name, biosample_term_id):
 
 def document(rec_id): 
     """
+    Backports a document record belonging to 
+    https://www.encodeproject.org/profiles/document.json.
     Example document: https://www.encodeproject.org/documents/716003cd-3ce7-41ce-b1e3-6f203b6632a0/?format=json
+  
+    Identifying properties on the Portal are "aliases" and "uuid".
 
     Args:
         rec_id: `str`. An identifier for a document record on the ENCODE Portal. 
@@ -64,12 +69,16 @@ def document(rec_id):
     raise Exception("Due to a bug in the ENCODE Portal, can't fetch document '{}' via the REST API.".format(rec))
     rec = ENC_CONN.get(rec_id, ignore404=False)
     aliases = rec["aliases"]
+    # Check if upstream exists already in Pulsar:
+    pulsar_rec = models.Document.find_by({UPSTREAM_PROP: [*aliases, rec["uuid"]]})
+    if pulsar_rec:
+        return pulsar_rec 
+    payload = {}
+    payload["description"] = rec["description"]
     if aliases:
         upstream_identifier = aliases[0]
     else:
         upstream_identifier = rec["uuid"]
-    payload = {}
-    payload["description"] = rec["description"]
     payload[UPSTREAM_PROP] = upstream_identifier
     document_type = rec["document_type"]
     # Determine whether this is a protocol document and set Document.is_protocol accordingly. 
@@ -80,34 +89,49 @@ def document(rec_id):
 
 def donor(rec_id):
     """
+    Backports a huma-donor record belonging to 
+    https://www.encodeproject.org/profiles/human_donor.json.
+
     The record will be checked for existence in Pulsar by doing a search on the field
     `donor.upstread_identifer`` using as a query value the record's accession on the ENCODE Portal, 
-    and also its first alias.
+    and also its aliases alias.
 
     Args:
-        rec_id: `str`. An identifier (alias or uuid) for a donor record on the ENCODE Portal. 
+        rec_id: `str`. An identifier (alias or uuid) for a human-donor record on the ENCODE Portal.
 
     Returns:
         `dict`: The JSON representation of the existing Donor if it already exists in
         in Pulsar, otherwise the POST response.  
     """
     rec = ENC_CONN.get(rec_id, ignore404=False)
-    payload = {}
-    #check if upstream exists already in Pulsar:
     accession = rec["accession"]
-    alias = rec["aliases"][0]
-    pulsar_rec = models.Treatment.find_by({UPSTREAM_PROP: upstream})
+    aliases = rec["aliases"]
+    # Check if upstream exists already in Pulsar:
+    pulsar_rec = models.Donor.find_by({UPSTREAM_PROP: [accession, *aliases]})
     if pulsar_rec:
         return pulsar_rec 
+    payload = {}
+    AGE_PROP = "age"
+    if AGE_PROP in rec:
+        payload[AGE_PROP] = rec[AGE_PROP]
+    GENDER_PROP = "sex"
+    if GENDER_PROP in rec:
+        payload["gender"] = rec[GENDER_PROP]
+    payload[UPSTREAM_PROP] = accession
+    payload["name"] = euu.strip_alias_prefix(aliases[0])
+    return models.Donor.post(payload)
 
 def treatment(rec_id):
     """
+    Backports a treatement record belonging to
+    https://www.encodeproject.org/profiles/treatment.json.
     The required properties in the ENCODE Portal are:
     
     1. treatment_term_name, 
     2. treatment_type. 
 
     An example on the Portal: https://www.encodeproject.org/treatments/933a1ff2-43a2-4a54-9c87-aad228d0033e/.
+    Identifying properties on the Portal are 'aliases' and 'uuid'.
 
     Args:
         rec_id: `str`. An identifier (alias or uuid) for a treatment record on the ENCODE Portal. 
@@ -117,18 +141,22 @@ def treatment(rec_id):
         in Pulsar, otherwise the POST response.  
     """
     rec = ENC_CONN.get(rec_id, ignore404=False)
-    payload = {}
+    aliases = rec["aliases"]
     #check if upstream exists already in Pulsar:
-    upstream = rec["aliases"][0]
-    pulsar_rec = models.Treatment.find_by({UPSTREAM_PROP: upstream})
+    pulsar_rec = models.Treatment.find_by({UPSTREAM_PROP: [*aliases, rec["uuid"]]})
     if pulsar_rec:
         return pulsar_rec 
 
+    payload = {}
     documents = rec["documents"]
     # Add any linked documents that aren't in Pulsar already:
     for doc in documents:
         document(doc)
-    payload[UPSTREAM_PROP] = upstream
+    if aliases:
+        upstream_identifier = rec["aliases"][0]
+    else:
+        upstream_identifier = rec["uuid"]
+    payload[UPSTREAM_PROP] = upstream_identifier
     payload["concentration"] = rec["amount"]
     amount_units = rec["amount_units"]
     pulsar_amount_units_rec = models.ConcentrationUnit.find_by(payload={"name": amount_units})

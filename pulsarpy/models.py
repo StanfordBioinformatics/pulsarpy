@@ -135,8 +135,8 @@ class Model(metaclass=Meta):
         payload = cls.add_model_name_to_payload(payload)
         print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
         res = requests.post(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
+        cls.write_response_html_to_file(res,"bob.html")
         return res.json()
-        #cls.write_response_html_to_file(res,"bob.html")
 
     @classmethod
     def find_by_or(cls, payload):
