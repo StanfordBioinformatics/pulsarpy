@@ -221,27 +221,29 @@ class Model(metaclass=Meta):
         fout.write(response.text)
         fout.close()
 
-
 class Antibody(Model):
     MODEL_NAME = "antibody"
-
 
 class AntibodyPurification(Model):
     MODEL_NAME = "antibody_purification"
 
-
 class Biosample(Model):
     MODEL_NAME = "biosample"
 
-
 class BiosampleTermName(Model):
     MODEL_NAME = "biosample_term_name"
+
+class BiosampleType(Model):
+    MODEL_NAME = "biosample_type"
 
 class ConcentrationUnit(Model):
     MODEL_NAME = "concentration_unit"
 
 class ConstructTag(Model):
     MODEL_NAME = "construct_tag"
+
+class CrisprModification(Model):
+    MODEL_NAME = "genetic_modification"
 
 class Donor(Model):
     MODEL_NAME = "donor"
@@ -254,6 +256,9 @@ class Treatment(Model):
 
 class TreatmentTermName(Model):
     MODEL_NAME = "treatment_term_name"
+
+class Vendor(Model):
+    MODEL_NAME = "vendor"
 
 
 if __name__ == "__main__":

@@ -17,11 +17,141 @@ import pulsarpy.utils
 
 protocol_regx = re.compile(r'protocol', re.IGNORECASE)
 
+ACCESSION_PROP = "accession"
+ALIASES_PROP = "aliases"
 UPSTREAM_PROP = "upstream_identifier"
+UUID_PROP = "uuid"
 ENC_CONN = euc.Connection("prod")
 
 # Biosamples to import for Jessika:
 # https://www.encodeproject.org/search/?type=Biosample&lab.title=Michael+Snyder%2C+Stanford&award.rfa=ENCODE4&biosample_type=tissue
+
+def set_name(rec):
+    """
+    Most of the models in Pulsar have a name attribute, and most of the time it is required. 
+    When backporting a record from the ENCODE Portal, we need some value to use as the record's name,
+    and records in the Portal don't have a name prop, so we need to use some other propery value. 
+   
+    The approach taken here is to use the record's "accession" properaty as a name if that is present. 
+    If the record doesn't have an accession, then use the first alias in the "aliases" property.
+    If there aren't any aliases, then use the record's "uuid" property. If for some reason none of
+    these properties are set, an Exception is raised.
+
+    Args:
+        rec_id: `str`. An identifier for some record on the ENCODE Portal. 
+
+    Returns:
+        `str` designating the value to use for a Pulsar LIMS record's 'name' attribute. 
+
+    Raises:
+        `Exception`: A value for name couldn't be set. 
+        
+    """
+    if ACCESSION_PROP in rec:
+        return rec[ACCESSION_PROP]
+    elif ALIASES_PROP in rec:
+        return rec[ALIASES_PROP][0]
+    elif rec[UUID_PROP] in rec:
+        return rec[UUID_PROP]
+    raise Exception("Can't set name for record {}".format(json.dumps(rec, indent=4)))
+
+def biosample(rec_id):
+    """
+    Backports a biosample record belonging to 
+    https://www.encodeproject.org/profiles/biosample.json into the Pulsar model called
+    Biosample. 
+
+    Identifying properties on the Portal are "accession", "aliases", and "uuid".
+    Portal's required props are: award, biosample_term_id, biosample_term_name, biosample_type lab,
+                                 organism, source
+
+    Args:
+        rec_id: `str`. An identifier for a document record on the ENCODE Portal. 
+
+    Returns:
+        `dict`: The JSON representation of the existing Document if it already exists in
+        in Pulsar, otherwise the POST response.  
+    """
+    rec = ENC_CONN.get(rec_id, ignore404=False)
+    aliases = rec[ALIASES_PROP]
+    accession = rec[ACCESSION_PROP]
+    # Check if upstream exists already in Pulsar:
+    pulsar_rec = models.Biosample.find_by({UPSTREAM_PROP: [*aliases, accession, rec[UUID_PROP]]})
+    if pulsar_rec:
+        return pulsar_rec 
+    payload = {}
+    payload[UPSTREAM_PROP] = accession
+    payload["name"] = set_name(rec)
+    btn = rec["biosample_term_name"]
+    bti = rec["biosample_term_id"]
+    pulsar_btn_rec = biosample_term_name(biosample_term_name=btn, biosample_term_id=bti)
+    payload["biosample_term_name_id"] = pulsar_btn_rec["id"]
+    payload["biosample_type_id"] = models.BiosampleType.find_by({"name": rec["biosample_type"]})["id"]
+    payload["description"] = rec["description"]
+    payload["donor_id"] = donor(ENC_CONN.get(rec["donor"]))["id"]
+    payload["lot_identifier"] = rec["lot_id"]
+    payload["passage_number"] = rec["passage_number"]
+    payload["vendor_id"] = vendor(rec["source"])["id"]
+    del vendor_rec
+    payload["vendor_product_identifier"] = rec["product_id"]
+   
+    treatments = rec["treatments"]
+    payload["treatment_ids"] = []
+    for treat in treatments:
+        pulsar_treat_rec = treatment(treat["uuid"])
+        payload["treatment_ids"].append(pulsar_treat_rec["id"])
+        
+    
+    post_response = models.Biosample.post(payload)
+    # Check if any CRISPR genetic_modifications and if so, associate with biosample. 
+    # In Pulsar, a biosample can only have one CRISPR genetic modification, so if there are
+    # several here specified from the Portal, than that is a problem. 
+    genetic_modifications = rec["genetic_modifications"]
+    for g in genetic_modifications:
+        gm = ENC_CONN.get(g["accession"], ignoreo404=False)
+        method = gm["method"]
+        if method != "CRISPR":
+            continue
+        crispr_modification(pulsar_biosample_id=post_response["id"], encode_gm_json=gm)
+    return post_response
+    
+def crispr_modification(pulsar_biosample_id, encode_gm_json)
+    """
+    Backports a CRISPR genetic_modification record belonging to 
+    https://www.encodeproject.org/profiles/genetic_modification.json into the Pulsar model called
+    CripsrModification. A CRISPR genetic_modification 
+    has the "method" property set to "CRISPR".
+
+    Identifying properties on the Portal are "accession", "aliases", and "uuid".
+    Requird properties on the Portal include "category", "method", and "purpose".
+
+    Args:
+        pulsar_biosample_id: `int`. The ID of the Biosample record in Pulsar with which to
+            associate the genetic modification.
+        encode_gm_json: `dict`. The JSON serialization of a genetic_modification record from
+            the ENCODE Portal.
+
+    Returns:
+        `dict`: The JSON representation of the existing Document if it already exists in
+        in Pulsar, otherwise the POST response.  
+    """
+    raise Exception("Backporting a CRISPR genetic_modification from the Portal is not fully implemented at this time.")
+    aliases = rec[ALIASES_PROP]
+    accession = rec[ACCESSION_PROP]
+    # Check if upstream exists already in Pulsar:
+    pulsar_rec = models.CrisprModification.find_by({UPSTREAM_PROP: [*aliases, accession, rec[UUID_PROP]]})
+    if pulsar_rec:
+        return pulsar_rec 
+    payload = {}
+    method = rec["method"]
+    if method != "CRISPR":
+        raise Exception("Only CRISPR gentetic_modifications can be backported into Pulsar at this time.")
+    payload[UPSTREAM_PROP] = accession
+    payload["name"] = set_name(rec)
+    payload["category"] = rec["category"]
+    payload["purpose"] = rec["purpose"]
+    
+    
 
 def biosample_term_name(biosample_term_name, biosample_term_id):
     """
@@ -42,13 +172,12 @@ def biosample_term_name(biosample_term_name, biosample_term_id):
     """
     payload = {}
     payload["name"] = biosample_term_name
-    payload["accession"] = biosample_term_id
+    payload[ACCESSION_PROP] = biosample_term_id
     # Check if upstream exists already in Pulsar:
-    pulsar_rec = models.BiosampleTermName.find_by({"accession": biosample_term_id})
+    pulsar_rec = models.BiosampleTermName.find_by({ACCESSION_PROP: biosample_term_id})
     if pulsar_rec:
         return pulsar_rec
     return models.BiosampleTermName.post(payload)
-
 
 
 def document(rec_id): 
@@ -68,9 +197,9 @@ def document(rec_id):
     """
     raise Exception("Due to a bug in the ENCODE Portal, can't fetch document '{}' via the REST API.".format(rec))
     rec = ENC_CONN.get(rec_id, ignore404=False)
-    aliases = rec["aliases"]
+    aliases = rec[ALIASES_PROP]
     # Check if upstream exists already in Pulsar:
-    pulsar_rec = models.Document.find_by({UPSTREAM_PROP: [*aliases, rec["uuid"]]})
+    pulsar_rec = models.Document.find_by({UPSTREAM_PROP: [*aliases, rec[UUID_PROP]]})
     if pulsar_rec:
         return pulsar_rec 
     payload = {}
@@ -78,7 +207,7 @@ def document(rec_id):
     if aliases:
         upstream_identifier = aliases[0]
     else:
-        upstream_identifier = rec["uuid"]
+        upstream_identifier = rec[UUID_PROP]
     payload[UPSTREAM_PROP] = upstream_identifier
     document_type = rec["document_type"]
     # Determine whether this is a protocol document and set Document.is_protocol accordingly. 
@@ -104,8 +233,8 @@ def donor(rec_id):
         in Pulsar, otherwise the POST response.  
     """
     rec = ENC_CONN.get(rec_id, ignore404=False)
-    accession = rec["accession"]
-    aliases = rec["aliases"]
+    accession = rec[ACCESSION_PROP]
+    aliases = rec[ALIASES_PROP]
     # Check if upstream exists already in Pulsar:
     pulsar_rec = models.Donor.find_by({UPSTREAM_PROP: [accession, *aliases]})
     if pulsar_rec:
@@ -141,9 +270,9 @@ def treatment(rec_id):
         in Pulsar, otherwise the POST response.  
     """
     rec = ENC_CONN.get(rec_id, ignore404=False)
-    aliases = rec["aliases"]
+    aliases = rec[ALIASES_PROP]
     #check if upstream exists already in Pulsar:
-    pulsar_rec = models.Treatment.find_by({UPSTREAM_PROP: [*aliases, rec["uuid"]]})
+    pulsar_rec = models.Treatment.find_by({UPSTREAM_PROP: [*aliases, rec[UUID_PROP]]})
     if pulsar_rec:
         return pulsar_rec 
 
@@ -153,9 +282,9 @@ def treatment(rec_id):
     for doc in documents:
         document(doc)
     if aliases:
-        upstream_identifier = rec["aliases"][0]
+        upstream_identifier = rec[ALIASES_PROP][0]
     else:
-        upstream_identifier = rec["uuid"]
+        upstream_identifier = rec[UUID_PROP]
     payload[UPSTREAM_PROP] = upstream_identifier
     payload["concentration"] = rec["amount"]
     amount_units = rec["amount_units"]
@@ -206,10 +335,37 @@ def treatment_term_name(treatment_term_name, treatment_term_id):
     """
     payload = {}
     payload["name"] = treatment_term_name
-    payload["accession"] = treatment_term_id
-    pulsar_rec = models.TreatmentTermName.find_by({"accession": treatment_term_id})
+    payload[ACCESSION_PROP] = treatment_term_id
+    pulsar_rec = models.TreatmentTermName.find_by({ACCESSION_PROP: treatment_term_id})
     if pulsar_rec:
         return pulsar_rec
     return models.TreatmentTermName.post(payload)
     
+def vendor(rec_id):
+    """
+    Backports a source record belonging to 
+    https://www.encodeproject.org/profiles/source.json.
+
+    Identifying properties on the Portal are "name", and "uuid".
+    Portal's required props are: "name", and "title". 
+
+    Args:
+        rec_id: `str`. An identifier (name or uuid) for a source record on the ENCODE Portal.
+
+    Returns:
+        `dict`: The JSON representation of the existing source if it already exists in
+        in Pulsar, otherwise the POST response.  
+    """
+    rec = ENC_CONN.get(rec_id, ignore404=False)
+    name = rec["name"]
+    uuid = rec["uuid"]
+    pulsar_rec = models.Vendor.find_by({UPSTREAM_PROP: [name, uuid]})
+    if pulsar_rec:
+        return pulsar_rec 
+    payload = {}
+    payload["description"] = rec["description"]
+    payload["name"] = name
+    payload[UPSTREAM_PROP] = name
+    payload["url"] = rec["url"]
+    return models.Vendor.post(payload)
     
