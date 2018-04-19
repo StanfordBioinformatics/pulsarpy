@@ -132,11 +132,18 @@ class Model(metaclass=Meta):
             `None`: If the API call didnt' return any results.
         """
         url = os.path.join(cls.URL, "find_by")
-        payload = cls.add_model_name_to_payload(payload)
+        payload = {"find_by": payload}
         print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
         res = requests.post(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
-        return res.json()
+        res_json = res.json()
+        if res_json:
+           try:
+               res_json = res_json[cls.MODEL_NAME]
+           except KeyError:
+               # Key won't be present if there isn't a serializer for it on the server. 
+               pass
+        return res_json
 
     @classmethod
     def find_by_or(cls, payload):
@@ -158,11 +165,18 @@ class Model(metaclass=Meta):
             `None`: If the API call didnt' return any results.
         """
         url = os.path.join(cls.URL, "find_by_or")
-        payload = cls.add_model_name_to_payload(payload)
+        payload = {"find_by_or": payload}
         print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
         res = requests.post(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
-        return res.json()
+        res_json = res.json()
+        if res_json:
+           try:
+               res_json = res_json[cls.MODEL_NAME]
+           except KeyError:
+               # Key won't be present if there isn't a serializer for it on the server. 
+               pass
+        return res_json
 
     @classmethod
     def get(cls, uid):
@@ -193,6 +207,7 @@ class Model(metaclass=Meta):
         url = cls.record_url(uid)
         payload = cls.add_model_name_to_payload(payload)
         res = requests.patch(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
+        #cls.write_response_html_to_file(res,"bob.html")
         return res.json()
 
     @classmethod
@@ -202,8 +217,11 @@ class Model(metaclass=Meta):
         Args     : uid - The database identifier of the record to fetch. Will be converted to a string.
                    payload - hash. This will be JSON-formatted prior to sending the request.
         """
+        #Add user to payload 
+        payload["user_id"] = 1 #admin user
         payload = cls.add_model_name_to_payload(payload)
         res = requests.post(url=cls.URL, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
+        cls.write_response_html_to_file(res,"bob.html")
         return res.json()
 
     @classmethod
@@ -229,6 +247,9 @@ class AntibodyPurification(Model):
 
 class Biosample(Model):
     MODEL_NAME = "biosample"
+
+class BiosampleOntology(Model):
+    MODEL_NAME = "biosample_ontology"
 
 class BiosampleTermName(Model):
     MODEL_NAME = "biosample_term_name"
@@ -256,6 +277,9 @@ class Treatment(Model):
 
 class TreatmentTermName(Model):
     MODEL_NAME = "treatment_term_name"
+
+class User(Model):
+    MODEL_NAME = "users"
 
 class Vendor(Model):
     MODEL_NAME = "vendor"
