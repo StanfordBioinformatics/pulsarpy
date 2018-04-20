@@ -99,8 +99,15 @@ def biosample(rec_id):
     payload["donor_id"] = donor(rec["donor"])["id"]
     payload["lot_identifier"] = rec.get("lot_id")
     payload["nih_institutional_certification"] = rec.get("nih_institutional_certification")
+    part_of_biosample = rec.get("part_of")
+    if part_of_biosample:
+       # Backport the parent. 
+       pulsar_parent = biosample(part_of_biosample)
+       payload["part_of_biosample_id"] = pulsar_parent["id"]
     payload["tissue_preservation_method"] = rec.get("preservation_method")
     payload["passage_number"] = rec.get("passage_number")
+    payload["starting_amount"] = rec.get("starting_amount")
+    payload["starting_amount_units"] = rec.get("starting_amount_units")
     payload["vendor_id"] = vendor(rec["source"])["id"]
     payload["vendor_product_identifier"] = rec.get("product_id")
    
