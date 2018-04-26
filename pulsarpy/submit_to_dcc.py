@@ -19,7 +19,7 @@ import encode_utils.connection as euc
 
 ENC_CONN = euc.Connection("prod")
 
-
+UPSTREAM_ATTR = "upstream_identifier"
 def filter_standard_attrs(payload):
     attrs = ["created_at", "id", "owner_id", "updated_at", "user_id"]
     for i in attrs:
@@ -29,15 +29,6 @@ def filter_standard_attrs(payload):
         if i.startswith("_"):
             payload.pop(i)
     return payload
-
-def get_upstreamid_from_post(post_response):
-    if "aliases" in post_response:
-        upstream = post_response["aliases"][0]
-    elif "accession" in post_response:
-        upstream = post_response["accession"]
-    elif "uuid" in post_response:
-        upstream = post_response["uuid"]
-    return upstream
 
 def patch(payload, raise_403=True, extend_array_values=False):
     """Updates a record in the ENCODE Portal based on its state in Pulsar.
@@ -66,22 +57,32 @@ def patch(payload, raise_403=True, extend_array_values=False):
     if not res:
         print("Warning: Could not PATCH {} as its upstream identifier {} was not found on the ENCODE Portal.".format(rec_id, upstream_id))
 
-def post(payload, dcc_profile, pulsar_rec_id):
+def post(payload, dcc_profile, rec_id):
     """
-    Uploads a new record from Pulsar to the ENCODE Portal and updates Pulsar's record's 
-    'upstream_identifier' attribute.
+    POSTS a record from Pulsar to the ENCODE Portal and updates the Pulsar record's 
+    'upstream_identifier' attribute to reference the new object on the Portal. 
 
     Args:
         payload: `dict`. The new record attributes to submit.
         dcc_profile: `str`. The name of the ENCODE Profile for this record, i.e. 'biosample',
             'genetic_modification'.
     Returns:
-        `dict`. The POST response if the record didn't yet exist on the ENCODE Portal, or the
-        record itself if it does already exist. Note that the dict. will be empty if the connection
-        object to the ENCODE Portal has the dry-run feature turned on.
+        `str`: The record identifier of the new record on the ENCODE Portal, or the existing 
+        record identifier if the record already exists. 
     """
-    model = models.model_lookup(pulsar_rec_id)
+    # Get a reference to the model class (i.e. Biosample) in the models module
+    mod = models.model_class_lookup(rec_id)
+    # Make sure the record's UPSTREAM_ATTR isn't set, which would mean that it was already POSTED
+    rec = mod.get(rec_id)
+    upstream = rec.get(UPSTREAM_ATTR)
+    if upstream:
+        print("Will not POST '{}' since it was already submitted as '{}'.".format(rec_id, upstream))
+        return
     payload[ENC_CONN.PROFILE_KEY] = dcc_profile
+
+    # `dict`. The POST response if the record didn't yet exist on the ENCODE Portal, or the
+    # record itself if it does already exist. Note that the dict. will be empty if the connection
+    # object to the ENCODE Portal has the dry-run feature turned on.
     response_json = ENC_CONN.post(payload)
     if "aliases" in response_json:
         upstream = response_json["aliases"][0]
@@ -89,26 +90,103 @@ def post(payload, dcc_profile, pulsar_rec_id):
         upstream = response_json["accession"]
     elif "uuid" in response_json:
         upstream = response_json["uuid"]
-    models.model_record_lookup(pulsar_rec_id).patch({"upstream_identifier": upstream})
-    return response_json
+    # Set value of records upstream_identifier in Pulsar
+    mod.patch({"upstream_identifier": upstream})
+    return upstream
+
+def post_crispr_modification:
+    pass
+
+def post_document:
+    pass
+
+def post_donor:
+    pass
+
+def post_vendor():
+    """
+    Returns:
+        `str`: The value 
+    """
 
 def post_biosample(rec_id, patch=False):
     b = models.Biosample.get(rec_id)
     payload = {}
+    # The alias lab prefixes will be set in the encode_utils package if the DCC_LAB environment
+    # variable is set. 
     payload["aliases"] = [b["name"], b["tube_label"]]
-    res = post(payload=payload, dcc_profile="biosample", pulsar_rec_id=rec_id)
+    payload["biosample_term_name"] = b["biosample_term_name"]["name"]
+    payload["biosample_term_id"] = b["biosample_term_name"]["accession"]
+    payload["biosample_type"] = b["biosample_type"]["name"]
+    payload["culture_harvest_date"] = b["date_biosample_taken"]
+    payload["description"] = b["description"]
+    payload["lot_id"] = b["lot_identifier"]
+    payload["nih_institutional_certification"] = b["nih_institutional_certification"]
+    payload["organism"] = "human"
+    payload["passage_number"] = b["passage_number"]
+    payload["starting_amount"] = b["starting_amount"]
+    payload["starting_amount_units"] = b["starting_amount_units"]
+    payload["submitter_comments"] = b["submitter_comments"]
+    payload["tissue_preservation_method"] = b["tissue_preservation_method"]
+    payload["vendor_product_identifier"] = b["vendor_product_identifier"]
+
+    crispr_modification = b["crispr_modification"]
+    if crispr_modification:
+        crispr_mod_upstream = crispr_modification[UPSTREAM_ATTR]
+        if not crispr_mod_upstream:
+            crispr_mod_upstream = post_crispr_modification(crispr_modification)
+        payload["genetic_modifications"] = crispr_mod_upstream
+
+    documents = b["documents"]
+    doc_upstreams = []
+    for doc in documents:
+        doc_upstream = doc[UPSTREAM_ATTR] 
+        if not doc_upstream:
+            doc_upstream = post_document(doc)
+        doc_upstreams.append(doc_upstream)
+    payload["documents"] = doc_upstreams
+
+    donor_upstream = b["donor"][UPSTREAM_ATTR]
+    if not donor_upstream:
+        donor_upstream = post_donor(b["donor"])
+    payload["donor"] = donor_upstream
 
 
-    rec = ENC_CONN.get(rec_id, ignore404=False)
-    aliases = rec[ALIASES_PROP]
+    part_of_biosample_id = b["part_of_biosample_id"]
+    if part_of_biosample_id:
+        part_of_biosample = models.Biosample.get(part_of_biosample_id)
+        pob_upstream = part_of_biosample[UPSTREAM_ATTR]
+        if not pob_upstream:
+            pob_upstream = post_biosample(part_of_biosample)
+        payload["part_of"] = pob_upstream
+
+    pooled_from_biosamples = b["pooled_from_biosamples"]
+    if pooled_from_biosamples:
+        payload["pooled_from"] = []
+        for p in pooled_from_biosamples:
+            p_upstream = p[UPSTREAM_ATTR]
+            if not p_upstream:
+                p_upstream = post_biosample(p)
+            payload["pooled_from"].append(p_upstream)
+
+    vendor_upstream = b["vendor"][UPSTREAM_ATTR]
+    if not vendor_upstream:
+        vendor_upstream = post_vendor(b["vendor"])
+    payload["source"] = vendor_upstream
+
+    treatments = b["treatments"]
+    treat_upstreams = []
+    for treat in treatments:
+        treat_upstream = treat[UPSTREAM_ATTR]
+        if not treat_upstream:
+            treat_upstream = post_treatment(treat)
+        treat_upstreams.append(treat_upstream)
+    payload["treatments"] = treat_upstreams
+ 
+    res = post(payload=payload, dcc_profile="biosample", rec_id=rec_id)
+
+
     accession = rec[ACCESSION_PROP]
-    # Check if upstream exists already in Pulsar:
-    pulsar_rec = models.Biosample.find_by({UPSTREAM_PROP: [*aliases, accession, rec[UUID_PROP], rec["@id"]]})
-    if pulsar_rec:
-        return pulsar_rec
-    payload = {}
-    payload[UPSTREAM_PROP] = accession
-    payload["name"] = set_name(rec)
     btn = rec["biosample_term_name"]
     bti = rec["biosample_term_id"]
     pulsar_btn_rec = biosample_term_name(biosample_term_name=btn, biosample_term_id=bti)

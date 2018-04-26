@@ -293,10 +293,10 @@ class Vendor(Model):
 #: A dict. where each key is the abbreviated model name in Pulsasr as specified by the ABBR constant
 #: in a given Pulsar model, such as biosampe.rb which is "B". Each value is a reference to the 
 #: respective model class defined in this module.
-model_abbrevs = {}
-model_abbrevs = ["B"] = Biosample
+MODEL_ABBREVS = {}
+MODEL_ABBREVS["B"] = Biosample
 
-def model_record_lookup(rec_id):
+def model_class_lookup(rec_id):
     """
     Given a Pulsar record identifier that starts with the associated record's model abbreviation, 
     figures out which model it belongs to (based on the content of the abbreviation) and returns
@@ -312,7 +312,7 @@ def model_record_lookup(rec_id):
         A reference to the respective model class that is defined in this module.
     """
     abbr = record_id.split("-")[0]
-    return model_abbrevs[abbr]
+    return MODEL_ABBREVS[abbr]
 
 if __name__ == "__main__":
     # pdb.set_trace()
