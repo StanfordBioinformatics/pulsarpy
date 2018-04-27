@@ -12,6 +12,7 @@ Required Environment Variables:
   2) PULSAR_TOKEN
 """
 
+import base64
 import os
 import json
 import requests
@@ -194,6 +195,7 @@ class Model(metaclass=Meta):
         url = cls.record_url(uid)
         print("Getting {} record with ID {}: {}".format(cls.__name__, uid, url))
         res = requests.get(url=url, headers=Model.HEADERS, verify=False)
+        #pdb.set_trace()
         return res.json()
 
     @classmethod
@@ -277,6 +279,13 @@ class Donor(Model):
 
 class Document(Model):
     MODEL_NAME = "document"
+
+    @staticmethod
+    def download(rec_id):
+        url = Document.record_url(rec_id) + "/download"
+        res = requests.get(url=url, headers=Model.HEADERS, verify=False)
+        res.raise_for_status()
+        return res.text
 
 class Treatment(Model):
     MODEL_NAME = "treatment"
