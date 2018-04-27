@@ -64,6 +64,16 @@ import inflection
 #    r = requests.post(url=url, headers=HEADERS, verify=False, data=json.dumps({"construct_tag": {"name": "nom"}}))
 
 
+def remove_model_prefix(uid):
+    """
+    Removes the optional model prefix from the given primary ID. For example, given the biosample
+    record whose primary ID is 8, and given the fact that the model prefix for the Biosample model
+    is "B-", the record ID can be specified either as 8 or B-8. However, the model prefix needs to
+    be stripped off prior to making API calls. 
+    """
+    
+    return str(uid).split("-")[-1]
+
 class Meta(type):
     def __init__(newcls, classname, supers, classdict):
         newcls.URL = os.path.join(newcls.URL, inflection.pluralize(newcls.MODEL_NAME))
@@ -107,7 +117,7 @@ class Model(metaclass=Meta):
 
         Args     : uid - The database identifier of the record to fetch. Will be converted to a string.
         """
-        uid = str(uid)
+        uid = remove_model_prefix(uid)
         return os.path.join(cls.URL, uid)
 
     @classmethod
@@ -189,9 +199,10 @@ class Model(metaclass=Meta):
     def get(cls, uid):
         """Fetches a record by the records ID.
 
-        Args     : uid - The database identifier of the record to fetch. Will be converted to a string.
+        Args: 
+            uid: The database identifier of the record to fetch, which can be specified either as the
+                primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
         """
-
         url = cls.record_url(uid)
         print("Getting {} record with ID {}: {}".format(cls.__name__, uid, url))
         res = requests.get(url=url, headers=Model.HEADERS, verify=False)
@@ -209,21 +220,23 @@ class Model(metaclass=Meta):
     def patch(cls, uid, payload):
         """Patches the payload to the specified record.
 
-        Args     : uid - The database identifier of the record to patch. Will be converted to a string.
-                   payload - hash. This will be JSON-formatted prior to sending the request.
+        Args: 
+            uid - The database identifier of the record to patch. which can be specified 
+                either as the primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
+            payload - hash. This will be JSON-formatted prior to sending the request.
         """
         url = cls.record_url(uid)
         payload = cls.add_model_name_to_payload(payload)
         res = requests.patch(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
-        #cls.write_response_html_to_file(res,"bob.html")
+        cls.write_response_html_to_file(res,"bob.html")
         return res.json()
 
     @classmethod
     def post(cls, payload):
         """Posts the data to the specified record.
 
-        Args     : uid - The database identifier of the record to fetch. Will be converted to a string.
-                   payload - hash. This will be JSON-formatted prior to sending the request.
+        Args: 
+            payload: `dict`. This will be JSON-formatted prior to sending the request.
         """
         #Add user to payload 
         payload["user_id"] = 1 #admin user
@@ -304,6 +317,7 @@ class Vendor(Model):
 #: respective model class defined in this module.
 MODEL_ABBREVS = {}
 MODEL_ABBREVS["B"] = Biosample
+MODEL_ABBREVS["DOC"] = Document
 
 def model_class_lookup(rec_id):
     """
@@ -320,7 +334,7 @@ def model_class_lookup(rec_id):
     Returns:
         A reference to the respective model class that is defined in this module.
     """
-    abbr = record_id.split("-")[0]
+    abbr = rec_id.split("-")[0]
     return MODEL_ABBREVS[abbr]
 
 if __name__ == "__main__":

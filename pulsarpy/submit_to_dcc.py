@@ -14,8 +14,12 @@ Required Environment Variables
      -DCC_API_KEY and DCC_SECRET_KEY
 """
 
+import base64
+
 from pulsarpy import models
+import encode_utils as eu
 import encode_utils.connection as euc
+import pdb
 
 
 class Submit():
@@ -32,7 +36,7 @@ class Submit():
         self.dcc_mode = dcc_mode
         self.ENC_CONN = euc.Connection(self.dcc_mode)
     
-    def filter_standard_attrs(payload):
+    def filter_standard_attrs(self, payload):
         attrs = ["created_at", "id", "owner_id", "updated_at", "user_id"]
         for i in attrs:
             if i in payload:
@@ -42,7 +46,7 @@ class Submit():
                 payload.pop(i)
         return payload
     
-    def patch(payload, raise_403=True, extend_array_values=False):
+    def patch(self, payload, raise_403=True, extend_array_values=False):
         """Updates a record in the ENCODE Portal based on its state in Pulsar.
     
         Args:
@@ -69,7 +73,7 @@ class Submit():
         if not res:
             print("Warning: Could not PATCH {} as its upstream identifier {} was not found on the ENCODE Portal.".format(rec_id, upstream_id))
     
-    def post(payload, dcc_profile, rec_id):
+    def post(self, payload, dcc_profile, rec_id):
         """
         POSTS a record from Pulsar to the ENCODE Portal and updates the Pulsar record's
         'upstream_identifier' attribute to reference the new object on the Portal.
@@ -89,40 +93,43 @@ class Submit():
         upstream = rec.get(self.UPSTREAM_ATTR)
         if upstream:
             print("Will not POST '{}' since it was already submitted as '{}'.".format(rec_id, upstream))
-            return
+            return upstream
         payload[self.ENC_CONN.PROFILE_KEY] = dcc_profile
     
         # `dict`. The POST response if the record didn't yet exist on the ENCODE Portal, or the
         # record itself if it does already exist. Note that the dict. will be empty if the connection
         # object to the ENCODE Portal has the dry-run feature turned on.
         response_json = self.ENC_CONN.post(payload)
-        if "aliases" in response_json:
-            upstream = response_json["aliases"][0]
-        elif "accession" in response_json:
+        if "accession" in response_json:
             upstream = response_json["accession"]
+        elif "aliases" in response_json:
+            upstream = response_json["aliases"][0]
         elif "uuid" in response_json:
             upstream = response_json["uuid"]
-        # Set value of records upstream_identifier in Pulsar
-        mod.patch({"upstream_identifier": upstream})
+        # Set value of the Pulsar record's upstream_identifier, but only if we are in prod mode since
+        # we don't want to set it to an upstream identifiers from any of the ENOCODE Portal  test servers. 
+        if self.dcc_mode == eu.DCC_PROD_MODE:
+            print("Setting the Pulsar record's upstream_identifier attribute to '{}'.".format(upstream))
+            mod.patch(uid=rec_id, payload={"upstream_identifier": upstream})
         return upstream
     
-    def post_crispr_modification(rec_id, patch=False):
+    def post_crispr_modification(self, rec_id, patch=False):
         cm = models.CrisprModification.get(rec_id)
-        res = post(payload=payload, dcc_profile="genetic_modification", rec_id=rec_id)
+        res = self.post(payload=payload, dcc_profile="genetic_modification", rec_id=rec_id)
     
-    def post_document(rec_id, patch=False):
+    def post_document(self, rec_id, patch=False):
         doc = models.Document.get(rec_id)
         # Before having to locally download document, check if upstream_identifier attr. is set.
-        if self.UPSTREAM_ATTR in doc:
-            return doc[self.UPSTREAM_ATTR]
+        upstream = doc[self.UPSTREAM_ATTR]
+        if upstream:
+            return upstream
         payload = {}
-        payload["aliases"] = doc["name"]
+        payload["aliases"] = [doc["name"]]
         payload["description"] = doc["description"]
         payload["document_type"] = doc["document_type"]["name"]
         content_type = doc["content_type"]
-        payload["content_type"] = content_type
         # Create attachment for the attachment prop
-        file_contents = models.Document.download(rec_id)
+        file_contents = bytes(models.Document.download(rec_id), "utf-8")
         data = base64.b64encode(file_contents)
         temp_uri = str(data, "utf-8")
         href = "data:{mime_type};base64,{temp_uri}".format(mime_type=content_type, temp_uri=temp_uri)
@@ -130,25 +137,26 @@ class Submit():
         attachment["download"] = doc["name"]
         attachment["type"] = content_type 
         attachment["href"] = href
+        #pdb.set_trace()
         payload["attachment"] = attachment
-        res = post(payload=payload, dcc_profile="document", rec_id=rec_id)
+        res = self.post(payload=payload, dcc_profile="document", rec_id=rec_id)
         return res
     
-    def post_donor(rec_id, patch=False):
+    def post_donor(self, rec_id, patch=False):
         don = models.Donor.get(rec_id)
         payload = {}
-        res = post(payload=payload, dcc_profile="donor", rec_id=rec_id)
+        res = self.post(payload=payload, dcc_profile="donor", rec_id=rec_id)
     
-    def post_vendor(rec_id, patch=False):
+    def post_vendor(self, rec_id, patch=False):
         """
         Returns:
             `str`: The value
         """
         ven = models.Vendor.get(rec_id)
         payload = {}
-        res = post(payload=payload, dcc_profile="source", rec_id=rec_id)
+        res = self.post(payload=payload, dcc_profile="source", rec_id=rec_id)
     
-    def post_biosample(rec_id, patch=False):
+    def post_biosample(self, rec_id, patch=False):
         b = models.Biosample.get(rec_id)
         payload = {}
         # The alias lab prefixes will be set in the encode_utils package if the DCC_LAB environment
@@ -222,52 +230,4 @@ class Submit():
             treat_upstreams.append(treat_upstream)
         payload["treatments"] = treat_upstreams
     
-        res = post(payload=payload, dcc_profile="biosample", rec_id=rec_id)
-    
-    
-        accession = rec[ACCESSION_PROP]
-        btn = rec["biosample_term_name"]
-        bti = rec["biosample_term_id"]
-        pulsar_btn_rec = biosample_term_name(biosample_term_name=btn, biosample_term_id=bti)
-        payload["biosample_term_name_id"] = pulsar_btn_rec["id"]
-        # biosample_type should already be in Pulsar.biosample_type, so won't check to add it first.
-        payload["biosample_type_id"] = models.BiosampleType.find_by({"name": rec["biosample_type"]})["id"]
-        date_obtained = rec.get("date_obtained")
-        if not date_obtained:
-            date_obtained = rec.get("culture_harvest_date")
-        payload["date_biosample_taken"] = date_obtained
-        payload["description"] = rec.get("description")
-        payload["donor_id"] = donor(rec["donor"])["id"]
-        payload["lot_identifier"] = rec.get("lot_id")
-        payload["nih_institutional_certification"] = rec.get("nih_institutional_certification")
-        part_of_biosample = rec.get("part_of")
-        if part_of_biosample:
-           # Backport the parent.
-           pulsar_parent = biosample(part_of_biosample)
-           payload["part_of_biosample_id"] = pulsar_parent["id"]
-        payload["tissue_preservation_method"] = rec.get("preservation_method")
-        payload["passage_number"] = rec.get("passage_number")
-        payload["starting_amount"] = rec.get("starting_amount")
-        payload["starting_amount_units"] = rec.get("starting_amount_units")
-        payload["vendor_id"] = vendor(rec["source"])["id"]
-        payload["vendor_product_identifier"] = rec.get("product_id")
-    
-        treatments = rec["treatments"]
-        payload["treatment_ids"] = []
-        for treat in treatments:
-            pulsar_treat_rec = treatment(treat["uuid"])
-            payload["treatment_ids"].append(pulsar_treat_rec["id"])
-    
-    
-        post_response = models.Biosample.post(payload)
-        # Check if any CRISPR genetic_modifications and if so, associate with biosample.
-        # In Pulsar, a biosample can only have one CRISPR genetic modification, so if there are
-        # several here specified from the Portal, than that is a problem.
-        genetic_modifications = rec["genetic_modifications"]
-        for g in genetic_modifications:
-            gm = self.ENC_CONN.get(g["accession"], ignoreo404=False)
-            method = gm["method"]
-            if method != "CRISPR":
-                continue
-            crispr_modification(pulsar_biosample_id=post_response["id"], encode_gm_json=gm)
-        return post_response
+        res = self.post(payload=payload, dcc_profile="biosample", rec_id=rec_id)
