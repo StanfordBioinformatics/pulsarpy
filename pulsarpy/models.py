@@ -295,10 +295,12 @@ class Document(Model):
 
     @staticmethod
     def download(rec_id):
+        # The sever is Base64 encoding the payload, so we'll need to base64 decode it. 
         url = Document.record_url(rec_id) + "/download"
         res = requests.get(url=url, headers=Model.HEADERS, verify=False)
         res.raise_for_status()
-        return res.text
+        data = base64.b64decode(res.json()["data"])
+        return data
 
 class Treatment(Model):
     MODEL_NAME = "treatment"

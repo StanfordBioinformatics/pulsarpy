@@ -46,7 +46,7 @@ class Submit():
                 payload.pop(i)
         return payload
     
-    def patch(self, payload, raise_403=True, extend_array_values=False):
+    def patch(self, upstream, payload, raise_403=True, extend_array_values=False):
         """Updates a record in the ENCODE Portal based on its state in Pulsar.
     
         Args:
@@ -66,12 +66,11 @@ class Submit():
             operation returns a 403 Forbidden status and the ignore403 argument is set, then the
             record as it presently exists on the Portal will be returned.
         """
-        upstream_id = payload["upstream_identifier"]
-        payload[self.ENC_CONN.ENCID_KEY] = upstream_id
+        payload[self.ENC_CONN.ENCID_KEY] = upstream
         res = self.ENC_CONN.patch(payload=payload, raise_403=raise_403, extend_array_values=extend_array_values)
         # res will be {} if record doesn't exist on the ENCODE Portal.
         if not res:
-            print("Warning: Could not PATCH {} as its upstream identifier {} was not found on the ENCODE Portal.".format(rec_id, upstream_id))
+            print("Warning: Could not PATCH '{}' as its upstream identifier was not found on the ENCODE Portal.".format(upstream))
     
     def post(self, payload, dcc_profile, rec_id):
         """
@@ -121,7 +120,7 @@ class Submit():
         doc = models.Document.get(rec_id)
         # Before having to locally download document, check if upstream_identifier attr. is set.
         upstream = doc[self.UPSTREAM_ATTR]
-        if upstream:
+        if upstream and not patch:
             return upstream
         payload = {}
         payload["aliases"] = [doc["name"]]
@@ -129,7 +128,7 @@ class Submit():
         payload["document_type"] = doc["document_type"]["name"]
         content_type = doc["content_type"]
         # Create attachment for the attachment prop
-        file_contents = bytes(models.Document.download(rec_id), "utf-8")
+        file_contents = models.Document.download(rec_id)
         data = base64.b64encode(file_contents)
         temp_uri = str(data, "utf-8")
         href = "data:{mime_type};base64,{temp_uri}".format(mime_type=content_type, temp_uri=temp_uri)
@@ -137,9 +136,11 @@ class Submit():
         attachment["download"] = doc["name"]
         attachment["type"] = content_type 
         attachment["href"] = href
-        #pdb.set_trace()
         payload["attachment"] = attachment
-        res = self.post(payload=payload, dcc_profile="document", rec_id=rec_id)
+        if patch:
+            res = self.patch(upstream=upstream,payload=payload)
+        else:
+            res = self.post(payload=payload, dcc_profile="document", rec_id=rec_id)
         return res
     
     def post_donor(self, rec_id, patch=False):
