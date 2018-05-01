@@ -263,36 +263,47 @@ class Model(metaclass=Meta):
 
 class Antibody(Model):
     MODEL_NAME = "antibody"
+    MODEL_ABBR = "AB"
 
 class AntibodyPurification(Model):
     MODEL_NAME = "antibody_purification"
+    MODEL_ABBR = "AP"
 
 class Biosample(Model):
     MODEL_NAME = "biosample"
+    MODEL_ABBR = "B"
 
 class BiosampleOntology(Model):
     MODEL_NAME = "biosample_ontology"
+    MODEL_ABBR = "BO"
 
 class BiosampleTermName(Model):
     MODEL_NAME = "biosample_term_name"
+    MODEL_ABBR = "BTN"
 
 class BiosampleType(Model):
     MODEL_NAME = "biosample_type"
+    MODEL_ABBR = "BTY"
 
 class ConcentrationUnit(Model):
     MODEL_NAME = "concentration_unit"
+    MODEL_ABBR = "CU"
 
 class ConstructTag(Model):
     MODEL_NAME = "construct_tag"
+    MODEL_ABBR = "CT"
 
 class CrisprModification(Model):
-    MODEL_NAME = "genetic_modification"
+    MODEL_NAME = "crispr_modification"
+    MODEL_ABBR = "CRISPR"
 
 class Donor(Model):
     MODEL_NAME = "donor"
+    MODEL_ABBR = "DON"
 
 class Document(Model):
     MODEL_NAME = "document"
+    MODEL_ABBR = "DOC"
 
     @staticmethod
     def download(rec_id):
@@ -305,15 +316,18 @@ class Document(Model):
 
 class Treatment(Model):
     MODEL_NAME = "treatment"
+    MODEL_ABBR = "TRT"
 
 class TreatmentTermName(Model):
     MODEL_NAME = "treatment_term_name"
+    MODEL_ABBR = "TTN"
 
 class User(Model):
     MODEL_NAME = "users"
 
 class Vendor(Model):
     MODEL_NAME = "vendor"
+    MODEL_ABBR = "V"
 
 if __name__ == "__main__":
     # pdb.set_trace()
