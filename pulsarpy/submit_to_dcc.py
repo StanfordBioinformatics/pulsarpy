@@ -22,6 +22,10 @@ import encode_utils.connection as euc
 import pdb
 
 
+class UpstreamNotSet(Exception):
+    pass
+
+
 class Submit():
     UPSTREAM_ATTR = "upstream_identifier"
 
@@ -46,11 +50,13 @@ class Submit():
                 payload.pop(i)
         return payload
     
-    def patch(self, upstream, payload, raise_403=True, extend_array_values=False):
-        """Updates a record in the ENCODE Portal based on its state in Pulsar.
+    def patch(self, pulsar_rec_id,  payload, raise_403=True, extend_array_values=False):
+        """Updates a record in the ENCODE Portal based on its state in Pulsar. 
     
         Args:
             payload: `dict`. containing the attribute key and value pairs to patch.
+            pulsar_rec_id: `str`. The Pulsar record identifier of the record we are POSTING to the DCC. Must
+                contain the model prefix, i.e. DOC-3 for the document record with primary ID 3.   
             raise_403: `bool`. `True` means to raise a ``requests.exceptions.HTTPError`` if a 403 status
                 (forbidden) is returned.
                 If set to `False` and there still is a 403 return status, then the object you were
@@ -65,39 +71,57 @@ class Submit():
             connection object to the ENCODE Portal has the dry-run feature turned on. If the PATCH
             operation returns a 403 Forbidden status and the ignore403 argument is set, then the
             record as it presently exists on the Portal will be returned.
+
+        Raises:
+            pulsarpy.submit_to_dcc.UpstreamNotSet: The Pulsar record's 'upstream_identifier' property
+              isn't set. 
+            
         """
+        upstream = payload.pop(self.UPSTREAM_ATTR)
+        if not upstream:
+            raise UpstreamNotSet("Pulsar record '{}' has no upstream value set.".format(pulsar_rec_id))
         payload[self.ENC_CONN.ENCID_KEY] = upstream
         res = self.ENC_CONN.patch(payload=payload, raise_403=raise_403, extend_array_values=extend_array_values)
         # res will be {} if record doesn't exist on the ENCODE Portal.
         if not res:
             print("Warning: Could not PATCH '{}' as its upstream identifier was not found on the ENCODE Portal.".format(upstream))
+        return res
     
-    def post(self, payload, dcc_profile, rec_id):
+    def post(self, payload, dcc_profile, pulsar_model, pulsar_rec_id):
         """
         POSTS a record from Pulsar to the ENCODE Portal and updates the Pulsar record's
-        'upstream_identifier' attribute to reference the new object on the Portal.
+        'upstream_identifier' attribute to reference the new object on the Portal (but only if 
+        in production mode where `self.dcc_mode = "prod"`). Before attempting
+        a POST, first checks whether the record in Pulsar already has the upstream value set, in
+        which case no POST will be made and the upstream value will be returned. In order for this 
+        mandatory check to work, the provided payload must include a key for ``self.UPSTREAM_ATTR``.
     
         Args:
             payload: `dict`. The new record attributes to submit.
             dcc_profile: `str`. The name of the ENCODE Profile for this record, i.e. 'biosample',
                 'genetic_modification'.
+            pulsar_model: One of the defined subclasses of the ``models.Model`` class, i.e. 
+                ``models.Model.Biosample``, which will be used to set the Pulsar record's 
+                upstream_identifier attribute after a successful POST to the ENCODE Portal.
+            pulsar_rec_id: `str`. The identifier of the Pulsar record to POST to the DCC.
         Returns:
-            `str`: The record identifier of the new record on the ENCODE Portal, or the existing
-            record identifier if the record already exists.
+            `str`: The identifier of the new record on the ENCODE Portal, or the existing
+            record identifier if the record already exists. The identifier of either the new record 
+            or existing record on the ENCODE Portal is determined to be the 'accession' if that property is present, 
+            otherwise it's the first alias if the 'aliases' property is present, otherwise its 
+            the 'uuid' property.
         """
-        # Get a reference to the model class (i.e. Biosample) in the models module
-        mod = models.model_class_lookup(rec_id)
         # Make sure the record's UPSTREAM_ATTR isn't set, which would mean that it was already POSTED
-        rec = mod.get(rec_id)
-        upstream = rec.get(self.UPSTREAM_ATTR)
+        upstream = payload.pop(self.UPSTREAM_ATTR)
         if upstream:
-            print("Will not POST '{}' since it was already submitted as '{}'.".format(rec_id, upstream))
+            print("Will not POST '{}' since it was already submitted as '{}'.".format(pulsar_rec_id, upstream))
             return upstream
         payload[self.ENC_CONN.PROFILE_KEY] = dcc_profile
     
         # `dict`. The POST response if the record didn't yet exist on the ENCODE Portal, or the
         # record itself if it does already exist. Note that the dict. will be empty if the connection
         # object to the ENCODE Portal has the dry-run feature turned on.
+        print(payload)
         response_json = self.ENC_CONN.post(payload)
         if "accession" in response_json:
             upstream = response_json["accession"]
@@ -106,86 +130,128 @@ class Submit():
         elif "uuid" in response_json:
             upstream = response_json["uuid"]
         # Set value of the Pulsar record's upstream_identifier, but only if we are in prod mode since
-        # we don't want to set it to an upstream identifiers from any of the ENOCODE Portal  test servers. 
+        # we don't want to set it to an upstream identifiers from any of the ENOCODE Portal test servers. 
         if self.dcc_mode == eu.DCC_PROD_MODE:
             print("Setting the Pulsar record's upstream_identifier attribute to '{}'.".format(upstream))
-            mod.patch(uid=rec_id, payload={"upstream_identifier": upstream})
+            pulsar_model.patch(uid=pulsar_rec_id, payload={"upstream_identifier": upstream})
         return upstream
     
     def post_crispr_modification(self, rec_id, patch=False):
-        cm = models.CrisprModification.get(rec_id)
-        res = self.post(payload=payload, dcc_profile="genetic_modification", rec_id=rec_id)
+        rec = models.CrisprModification.get(rec_id)
+        res = self.post(payload=payload, dcc_profile="genetic_modification", pulsar_model=models.CrisprModification, pulsar_rec_id=rec_id)
+        return res
+    
+
+    def get_upstream_id(self, rec):
+        return rec[self.UPSTREAM_ATTR]
     
     def post_document(self, rec_id, patch=False):
-        doc = models.Document.get(rec_id)
-        # Before having to locally download document, check if upstream_identifier attr. is set.
-        upstream = doc[self.UPSTREAM_ATTR]
-        if upstream and not patch:
-            return upstream
+        rec = models.Document.get(rec_id)
         payload = {}
-        payload["aliases"] = [doc["name"]]
-        payload["description"] = doc["description"]
-        payload["document_type"] = doc["document_type"]["name"]
-        content_type = doc["content_type"]
+        payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
+        payload["aliases"] = [rec["name"]]
+        payload["description"] = rec["description"]
+        payload["document_type"] = rec["document_type"]["name"]
+        content_type = rec["content_type"]
         # Create attachment for the attachment prop
         file_contents = models.Document.download(rec_id)
         data = base64.b64encode(file_contents)
         temp_uri = str(data, "utf-8")
         href = "data:{mime_type};base64,{temp_uri}".format(mime_type=content_type, temp_uri=temp_uri)
         attachment = {}
-        attachment["download"] = doc["name"]
+        attachment["download"] = rec["name"]
         attachment["type"] = content_type 
         attachment["href"] = href
         payload["attachment"] = attachment
         if patch:
-            res = self.patch(upstream=upstream,payload=payload)
+            res = self.patch(payload=payload, pulsar_rec_id=rec_id)
         else:
-            res = self.post(payload=payload, dcc_profile="document", rec_id=rec_id)
+            res = self.post(payload=payload, dcc_profile="document", pulsar_model=models.Document, pulsar_rec_id=rec_id)
         return res
-    
-    def post_donor(self, rec_id, patch=False):
-        don = models.Donor.get(rec_id)
+
+    def post_treatment(self, rec_id, patch=False):
+        rec = models.Treatment.get(rec_id)
         payload = {}
-        res = self.post(payload=payload, dcc_profile="donor", rec_id=rec_id)
+        payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
+        payload["aliases"] = [rec["name"]]
+        conc = rec.get("concentration")
+        if conc:
+            payload["amount"] = conc
+            payload["amount_units"] = rec["concentration_unit"]["name"]
+        duration = rec.get("duration") 
+        if duration:
+            payload["duration"] = duration
+            payload["duration_units"] = rec["duration_units"]
+        temp = rec.get("temperature_celsius")
+        if temp:
+            payload["temperature"] = temp
+            payload["temperature_units"] = "Celsius"
+        payload["treatment_term_id"] = rec["treatment_term_name"]["accession"]
+        payload["treatment_term_name"] = rec["treatment_term_name"]["name"]
+        payload["treatment_type"] = rec["treatment_type"]
+
+        documents = rec["documents"]
+        doc_upstreams = []
+        for doc in documents:
+            doc_upstream = doc[self.UPSTREAM_ATTR]
+            if not doc_upstream:
+                doc_upstream = post_document(doc)
+            doc_upstreams.append(doc_upstream)
+        payload["documents"] = doc_upstreams
+        # Submit
+        if patch:
+            res = self.patch(payload=payload, pulsar_rec_id=rec_id)
+        else:
+            res = self.post(payload=payload, dcc_profile="treatment", pulsar_model=models.Treatment, pulsar_rec_id=rec_id)
+        return res
+
     
     def post_vendor(self, rec_id, patch=False):
         """
-        Returns:
-            `str`: The value
         """
-        ven = models.Vendor.get(rec_id)
+        rec = models.Vendor.get(rec_id)
         payload = {}
-        res = self.post(payload=payload, dcc_profile="source", rec_id=rec_id)
+        payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
+        payload["aliases"] = [rec["name"]]
+        payload["description"] = rec["description"]
+        payload["url"] = rec["url"]
+        payload["title"] = rec["name"]
+        if patch:
+            res = self.patch(payload=payload, dcc_profile="source", pulsar_rec_id=rec_id)
+        else:
+            res = self.post(payload=payload, dcc_profile="source", pulsar_model=models.Vendor, pulsar_rec_id=rec_id)
+        return res
     
     def post_biosample(self, rec_id, patch=False):
-        b = models.Biosample.get(rec_id)
+        rec = models.Biosample.get(rec_id)
         payload = {}
+        payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
         # The alias lab prefixes will be set in the encode_utils package if the DCC_LAB environment
         # variable is set.
-        payload["aliases"] = [b["name"], b["tube_label"]]
-        payload["biosample_term_name"] = b["biosample_term_name"]["name"]
-        payload["biosample_term_id"] = b["biosample_term_name"]["accession"]
-        payload["biosample_type"] = b["biosample_type"]["name"]
-        payload["culture_harvest_date"] = b["date_biosample_taken"]
-        payload["description"] = b["description"]
-        payload["lot_id"] = b["lot_identifier"]
-        payload["nih_institutional_certification"] = b["nih_institutional_certification"]
+        payload["aliases"] = [rec["name"], rec["tube_label"]]
+        payload["biosample_term_name"] = rec["biosample_term_name"]["name"]
+        payload["biosample_term_id"] = rec["biosample_term_name"]["accession"]
+        payload["biosample_type"] = rec["biosample_type"]["name"]
+        payload["culture_harvest_date"] = rec["date_biosample_taken"]
+        payload["description"] = rec["description"]
+        payload["lot_id"] = rec["lot_identifier"]
+        payload["nih_institutional_certification"] = rec["nih_institutional_certification"]
         payload["organism"] = "human"
-        payload["passage_number"] = b["passage_number"]
-        payload["starting_amount"] = b["starting_amount"]
-        payload["starting_amount_units"] = b["starting_amount_units"]
-        payload["submitter_comments"] = b["submitter_comments"]
-        payload["tissue_preservation_method"] = b["tissue_preservation_method"]
-        payload["vendor_product_identifier"] = b["vendor_product_identifier"]
+        payload["passage_number"] = rec["passage_number"]
+        payload["starting_amount"] = rec["starting_amount"]
+        payload["starting_amount_units"] = rec["starting_amount_units"]
+        payload["submitter_comments"] = rec["submitter_comments"]
+        payload["tissue_preservation_method"] = rec["tissue_preservation_method"]
+        payload["vendor_product_identifier"] = rec["vendor_product_identifier"]
     
-        crispr_modification = b["crispr_modification"]
+        crispr_modification = rec["crispr_modification"]
         if crispr_modification:
             crispr_mod_upstream = crispr_modification[self.UPSTREAM_ATTR]
             if not crispr_mod_upstream:
                 crispr_mod_upstream = post_crispr_modification(crispr_modification)
             payload["genetic_modifications"] = crispr_mod_upstream
     
-        documents = b["documents"]
+        documents = rec["documents"]
         doc_upstreams = []
         for doc in documents:
             doc_upstream = doc[self.UPSTREAM_ATTR]
@@ -194,13 +260,13 @@ class Submit():
             doc_upstreams.append(doc_upstream)
         payload["documents"] = doc_upstreams
     
-        donor_upstream = b["donor"][self.UPSTREAM_ATTR]
+        donor_upstream = rec["donor"][self.UPSTREAM_ATTR]
         if not donor_upstream:
-            donor_upstream = post_donor(b["donor"])
+            raise Exception("Donor '{}' of biosample '{}' does not have its upstream set. Donors must be registered with the DCC directly.".format(rec["donor"]["id"], rec_id))
         payload["donor"] = donor_upstream
     
     
-        part_of_biosample_id = b["part_of_biosample_id"]
+        part_of_biosample_id = rec["part_of_biosample_id"]
         if part_of_biosample_id:
             part_of_biosample = models.Biosample.get(part_of_biosample_id)
             pob_upstream = part_of_biosample[self.UPSTREAM_ATTR]
@@ -208,7 +274,7 @@ class Submit():
                 pob_upstream = post_biosample(part_of_biosample)
             payload["part_of"] = pob_upstream
     
-        pooled_from_biosamples = b["pooled_from_biosamples"]
+        pooled_from_biosamples = rec["pooled_from_biosamples"]
         if pooled_from_biosamples:
             payload["pooled_from"] = []
             for p in pooled_from_biosamples:
@@ -217,12 +283,12 @@ class Submit():
                     p_upstream = post_biosample(p)
                 payload["pooled_from"].append(p_upstream)
     
-        vendor_upstream = b["vendor"][self.UPSTREAM_ATTR]
+        vendor_upstream = rec["vendor"][self.UPSTREAM_ATTR]
         if not vendor_upstream:
-            vendor_upstream = post_vendor(b["vendor"])
+            vendor_upstream = post_vendor(rec["vendor"])
         payload["source"] = vendor_upstream
     
-        treatments = b["treatments"]
+        treatments = rec["treatments"]
         treat_upstreams = []
         for treat in treatments:
             treat_upstream = treat[self.PSTREAM_ATTR]
@@ -230,5 +296,9 @@ class Submit():
                 treat_upstream = post_treatment(treat)
             treat_upstreams.append(treat_upstream)
         payload["treatments"] = treat_upstreams
-    
-        res = self.post(payload=payload, dcc_profile="biosample", rec_id=rec_id)
+   
+        if patch:  
+            res = self.patch(payload=payload, pulsar_rec_id=rec_id)
+        else:
+            res = self.post(payload=payload, dcc_profile="biosample", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
+        return res

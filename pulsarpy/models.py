@@ -206,6 +206,7 @@ class Model(metaclass=Meta):
         url = cls.record_url(uid)
         print("Getting {} record with ID {}: {}".format(cls.__name__, uid, url))
         res = requests.get(url=url, headers=Model.HEADERS, verify=False)
+        cls.write_response_html_to_file(res,"get_bob.html")
         #pdb.set_trace()
         return res.json()
 
@@ -313,31 +314,6 @@ class User(Model):
 
 class Vendor(Model):
     MODEL_NAME = "vendor"
-
-#: A dict. where each key is the abbreviated model name in Pulsasr as specified by the ABBR constant
-#: in a given Pulsar model, such as biosampe.rb which is "B". Each value is a reference to the 
-#: respective model class defined in this module.
-MODEL_ABBREVS = {}
-MODEL_ABBREVS["B"] = Biosample
-MODEL_ABBREVS["DOC"] = Document
-
-def model_class_lookup(rec_id):
-    """
-    Given a Pulsar record identifier that starts with the associated record's model abbreviation, 
-    figures out which model it belongs to (based on the content of the abbreviation) and returns
-    a reference to the class by the same name in this module. Useful for when you are POSTING a record
-    to the ENCODE Portal and then need to update the 'upstream_identifier' attribute in the  record in 
-    Pulsar. Examlples of this can be seen in `submit_to_dcc.py` module.
-
-    Args:
-        recd_id: `str`. The identifier for a record in Pulsar that begins with the associated
-            model abbreviation, such as B-19 for the biosample record with primary ID 19. 
-
-    Returns:
-        A reference to the respective model class that is defined in this module.
-    """
-    abbr = rec_id.split("-")[0]
-    return MODEL_ABBREVS[abbr]
 
 if __name__ == "__main__":
     # pdb.set_trace()
