@@ -121,7 +121,6 @@ class Submit():
         # `dict`. The POST response if the record didn't yet exist on the ENCODE Portal, or the
         # record itself if it does already exist. Note that the dict. will be empty if the connection
         # object to the ENCODE Portal has the dry-run feature turned on.
-        print(payload)
         response_json = self.ENC_CONN.post(payload)
         if "accession" in response_json:
             upstream = response_json["accession"]
@@ -134,11 +133,16 @@ class Submit():
         if self.dcc_mode == eu.DCC_PROD_MODE:
             print("Setting the Pulsar record's upstream_identifier attribute to '{}'.".format(upstream))
             pulsar_model.patch(uid=pulsar_rec_id, payload={"upstream_identifier": upstream})
+            print("upstream_identifier attribute set successfully.")
         return upstream
     
     def post_crispr_modification(self, rec_id, patch=False):
         rec = models.CrisprModification.get(rec_id)
+        aliases = []
+        aliases.append(models.CrisprModification.MODEL_ABBR + "-" + str(rec["id"]))
+        aliases.append(rec["name"])
         payload = {}
+        payload["aliases"] = aliases
         res = self.post(payload=payload, dcc_profile="genetic_modification", pulsar_model=models.CrisprModification, pulsar_rec_id=rec_id)
         return res
     
@@ -148,10 +152,12 @@ class Submit():
     
     def post_document(self, rec_id, patch=False):
         rec = models.Document.get(rec_id)
-        alias = models.Document.MODEL_ABBR + "-" + str(rec["id"])
+        aliases = []
+        aliases.append(models.Document.MODEL_ABBR + "-" + str(rec["id"]))
+        aliases.append(rec["name"])
         payload = {}
+        payload["aliases"] = aliases
         payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
-        payload["aliases"] = [rec["name"], alias]
         payload["description"] = rec["description"]
         payload["document_type"] = rec["document_type"]["name"]
         content_type = rec["content_type"]
@@ -173,10 +179,12 @@ class Submit():
 
     def post_treatment(self, rec_id, patch=False):
         rec = models.Treatment.get(rec_id)
-        alias = models.Treatment.MODEL_ABBR + "-" + str(rec["id"])
+        aliases = []
+        aliases.append(models.Treatment.MODEL_ABBR + "-" + str(rec["id"]))
+        aliases.append(rec["name"])
         payload = {}
+        payload["aliases"] = aliases
         payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
-        payload["aliases"] = [rec["name"], alias]
         conc = rec.get("concentration")
         if conc:
             payload["amount"] = conc
@@ -211,41 +219,40 @@ class Submit():
     
     def post_vendor(self, rec_id, patch=False):
         """
+        Vendors must be registered directly by the DCC personel. 
         """
-        rec = models.Vendor.get(rec_id)
-        alias = models.Vendor.MODEL_ABBR + "-" + str(rec["id"])
-        payload = {}
-        payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
-        payload["aliases"] = [rec["name"], alias]
-        payload["description"] = rec["description"]
-        payload["name"] = rec["name"]
-        payload["url"] = rec["url"]
-        payload["title"] = rec["name"]
-        if patch:
-            res = self.patch(payload=payload, dcc_profile="source", pulsar_rec_id=rec_id)
-        else:
-            res = self.post(payload=payload, dcc_profile="source", pulsar_model=models.Vendor, pulsar_rec_id=rec_id)
-        return res
-    
+        raise Exception("Vendors must be registered directly by the DCC personel.")
+
     def post_biosample(self, rec_id, patch=False):
         rec = models.Biosample.get(rec_id)
-        alias = models.Biosample.MODEL_ABBR + "-" + str(rec["id"])
-        payload = {}
-        payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
         # The alias lab prefixes will be set in the encode_utils package if the DCC_LAB environment
         # variable is set.
-        payload["aliases"] = [rec["name"], rec["tube_label"], alias]
-        payload["biosample_term_name"] = rec["biosample_term_name"]["name"]
+        aliases = []
+        aliases.append(models.Biosample.MODEL_ABBR + "-" + str(rec["id"]))
+        aliases.append(rec["name"])
+        tube_label = rec["tube_label"]
+        if tube_label:
+            aliases.append(tube_label)
+        payload = {}
+        payload["aliases"] = aliases
+        payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
+        payload["biosample_term_name"] = rec["biosample_term_name"]["name"].lower() #Portal requires lower-case.
         payload["biosample_term_id"] = rec["biosample_term_name"]["accession"]
-        payload["biosample_type"] = rec["biosample_type"]["name"]
+        biosample_type = rec["biosample_type"]["name"] 
+        payload["biosample_type"] = biosample_type
         date_biosample_taken = rec["date_biosample_taken"]
         if date_biosample_taken:
-            payload["culture_harvest_date"] = date_biosample_taken
+            if biosample_type == "tissue":
+                payload["date_obtained"] = date_biosample_taken
+            else:
+                payload["culture_harvest_date"] = date_biosample_taken
         payload["description"] = rec["description"]
         lot_id = rec["lot_identifier"] 
         if lot_id:
             payload["lot_id"] = lot_id
-        payload["nih_institutional_certification"] = rec["nih_institutional_certification"]
+        nih_cert = rec["nih_institutional_certification"]
+        if nih_cert:
+            payload["nih_institutional_certification"] = nih_cert
         payload["organism"] = "human"
         passage_number = rec["passage_number"]
         if passage_number:
@@ -259,7 +266,7 @@ class Submit():
             payload["submitter_comment"] = submitter_comment
         preservation_method = rec["tissue_preservation_method"]
         if preservation_method:
-            payload["preservation_method"] = rec["tissue_preservation_method"]
+            payload["preservation_method"] = preservation_method
         prod_id = rec["vendor_product_identifier"]
         if prod_id:
             payload["product_id"] = prod_id
@@ -268,7 +275,7 @@ class Submit():
         if crispr_modification:
             crispr_mod_upstream = crispr_modification[self.UPSTREAM_ATTR]
             if not crispr_mod_upstream:
-                crispr_mod_upstream = post_crispr_modification(crispr_modification)
+                crispr_mod_upstream = self.post_crispr_modification(crispr_modification["id"])
             payload["genetic_modifications"] = crispr_mod_upstream
     
         documents = rec["documents"]
@@ -305,7 +312,7 @@ class Submit():
     
         vendor_upstream = rec["vendor"][self.UPSTREAM_ATTR]
         if not vendor_upstream:
-            vendor_upstream = self.post_vendor(rec["vendor"]["id"])
+            raise Exception("Biosample '{}' has a vendor without an upstream set: Vendors are requied to be registered by the DCC personel, and Pulsar needs to have the Vendor record's '{}' attribute set.".format(rec_id, self.UPSTREAM_ATTR))
         payload["source"] = vendor_upstream
     
         treatments = rec["treatments"]
@@ -313,7 +320,7 @@ class Submit():
         for treat in treatments:
             treat_upstream = treat[self.PSTREAM_ATTR]
             if not treat_upstream:
-                treat_upstream = post_treatment(treat["id"])
+                treat_upstream = self.post_treatment(treat["id"])
             treat_upstreams.append(treat_upstream)
         payload["treatments"] = treat_upstreams
    

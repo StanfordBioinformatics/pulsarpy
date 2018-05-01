@@ -207,14 +207,22 @@ class Model(metaclass=Meta):
         print("Getting {} record with ID {}: {}".format(cls.__name__, uid, url))
         res = requests.get(url=url, headers=Model.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"get_bob.html")
+        res.raise_for_status()
         #pdb.set_trace()
         return res.json()
 
     @classmethod
     def index(cls):
         """Fetches all records.
+
+        Returns:
+            `dict`. The JSON formatted response. 
+
+        Raises:
+            `requests.exceptions.HTTPError`: The status code is not ok.
         """
         res = requests.get(cls.URL, headers=Model.HEADERS, verify=False)
+        res.raise_for_status()
         return res.json()
 
     @classmethod
@@ -225,11 +233,18 @@ class Model(metaclass=Meta):
             uid - The database identifier of the record to patch. which can be specified 
                 either as the primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
             payload - hash. This will be JSON-formatted prior to sending the request.
+
+        Returns:
+            `dict`. The JSON formatted response. 
+
+        Raises:
+            `requests.exceptions.HTTPError`: The status code is not ok.
         """
         url = cls.record_url(uid)
         payload = cls.add_model_name_to_payload(payload)
         res = requests.patch(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
+        res.raise_for_status()
         return res.json()
 
     @classmethod
@@ -238,12 +253,19 @@ class Model(metaclass=Meta):
 
         Args: 
             payload: `dict`. This will be JSON-formatted prior to sending the request.
+
+        Returns:
+            `dict`. The JSON formatted response. 
+
+        Raises:
+            `requests.exceptions.HTTPError`: The status code is not ok.
         """
         #Add user to payload 
         payload["user_id"] = 1 #admin user
         payload = cls.add_model_name_to_payload(payload)
         res = requests.post(url=cls.URL, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
+        res.raise_for_status()
         return res.json()
 
     @classmethod
