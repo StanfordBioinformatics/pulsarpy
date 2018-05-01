@@ -49,6 +49,28 @@ class Submit():
             if i.startswith("_"):
                 payload.pop(i)
         return payload
+
+    def clean_name(self, name):
+        """
+        Removes characters from a string that are not allowed when submitting to certain properties,
+        such as aliases. Some characters are replaced with allowed
+        character equivalents rather than removed.
+
+        Examples:  
+            "hi #1" -> "hi 1"
+            "6/24/18" -> "6-24-18" 
+
+        Args:
+            name: `str`. The value to clean.
+
+        Returns:
+            `str`. The cleaned value that is submission acceptable. 
+        """
+        return name.replace("#","").replace("/","-")
+                  
+
+For example, given "hi #1", "hi 1" will be
+        returned. 
     
     def patch(self, pulsar_rec_id,  payload, raise_403=True, extend_array_values=False):
         """Updates a record in the ENCODE Portal based on its state in Pulsar. 
@@ -140,7 +162,7 @@ class Submit():
         rec = models.CrisprModification.get(rec_id)
         aliases = []
         aliases.append(models.CrisprModification.MODEL_ABBR + "-" + str(rec["id"]))
-        aliases.append(rec["name"])
+        aliases.append(self.clean_name(rec["name"]))
         payload = {}
         payload["aliases"] = aliases
         res = self.post(payload=payload, dcc_profile="genetic_modification", pulsar_model=models.CrisprModification, pulsar_rec_id=rec_id)
@@ -154,7 +176,7 @@ class Submit():
         rec = models.Document.get(rec_id)
         aliases = []
         aliases.append(models.Document.MODEL_ABBR + "-" + str(rec["id"]))
-        aliases.append(rec["name"])
+        aliases.append(self.clean_name(rec["name"]))
         payload = {}
         payload["aliases"] = aliases
         payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
@@ -181,7 +203,7 @@ class Submit():
         rec = models.Treatment.get(rec_id)
         aliases = []
         aliases.append(models.Treatment.MODEL_ABBR + "-" + str(rec["id"]))
-        aliases.append(rec["name"])
+        aliases.append(self.clean_name(rec["name"]))
         payload = {}
         payload["aliases"] = aliases
         payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
@@ -229,7 +251,7 @@ class Submit():
         # variable is set.
         aliases = []
         aliases.append(models.Biosample.MODEL_ABBR + "-" + str(rec["id"]))
-        aliases.append(rec["name"])
+        aliases.append(self.clean_name(rec["name"]))
         tube_label = rec["tube_label"]
         if tube_label:
             aliases.append(tube_label)
@@ -237,8 +259,7 @@ class Submit():
         payload["aliases"] = aliases
         payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
         payload["biosample_term_name"] = rec["biosample_term_name"]["name"].lower() #Portal requires lower-case.
-        payload["biosample_term_id"] = rec["biosample_term_name"]["accession"]
-        biosample_type = rec["biosample_type"]["name"] 
+        payload["biosample_term_id"] = rec["biosample_term_name"]["accession"] biosample_type = rec["biosample_type"]["name"] 
         payload["biosample_type"] = biosample_type
         date_biosample_taken = rec["date_biosample_taken"]
         if date_biosample_taken:
