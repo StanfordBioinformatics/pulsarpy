@@ -148,7 +148,7 @@ For example, given "hi #1", "hi 1" will be
             upstream = response_json["accession"]
         elif "aliases" in response_json:
             upstream = response_json["aliases"][0]
-        elif "uuid" in response_json:
+        else:
             upstream = response_json["uuid"]
         # Set value of the Pulsar record's upstream_identifier, but only if we are in prod mode since
         # we don't want to set it to an upstream identifiers from any of the ENOCODE Portal test servers. 

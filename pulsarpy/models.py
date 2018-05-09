@@ -85,6 +85,45 @@ class Model(metaclass=Meta):
     HEADERS = {'content-type': 'application/json', 'Authorization': 'Token token={}'.format(TOKEN)}
     MODEL_NAME = ""  # subclasses define
 
+    def __init__(self, rec_id):
+        """
+        Args: 
+            uid: The database identifier of the record to fetch, which can be specified either as the
+                primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
+        """
+        self.__dict__["attrs"] = {}
+        self.rec_id = str(rec_id).split("-")[-1]
+        self.record_url = os.path.join(self.URL, self.rec_id)
+        self.__dict__["attrs"] = self._get() #avoid call to self.__setitem__() for this attr. 
+
+    def __getattr__(self, name):
+        """
+        Treats database attributes for the record as Python attributes. An attribute is looked up
+        in self.attrs.
+        """
+        return self.attrs[name]
+
+    def __setattr__(self, name, value):
+        """
+        Sets the value of an attribute in self.attrs.
+        """
+        if name not in self.attrs:
+            return object.__setattr__(self, name, value)
+        object.__setattr__(self, self.attrs[name], value)
+        #self.__dict__["attrs"][name] = value #this works too
+
+
+    def _get(self):
+        """Fetches a record by the records ID.
+        """
+        print("Getting {} record with ID {}: {}".format(self.__class__.__name__, self.rec_id, self.record_url))
+        res = requests.get(url=self.record_url, headers=Model.HEADERS, verify=False)
+        self.write_response_html_to_file(res,"get_bob.html")
+        res.raise_for_status()
+        #pdb.set_trace()
+        #return res.json()
+        return res.json()
+
     @classmethod
     def add_model_name_to_payload(cls, payload):
         """
@@ -111,23 +150,10 @@ class Model(metaclass=Meta):
             payload = {cls.MODEL_NAME: payload}
         return payload
 
-    @classmethod
-    def record_url(cls, uid):
-        """Given a record identifier, returns the URL to the record.
-
-        Args     : uid - The database identifier of the record to fetch. Will be converted to a string.
-        """
-        uid = remove_model_prefix(uid)
-        return os.path.join(cls.URL, uid)
-
-    @classmethod
-    def delete(cls, uid):
+    def delete(self):
         """Deletes the record.
-
-        Args     : uid - The database identifier of the record to fetch. Will be converted to a string.
         """
-        url = cls.record_url(uid)
-        res = requests.delete(url=url, headers=Model.HEADERS, verify=False)
+        res = requests.delete(url=self.record_url, headers=Model.HEADERS, verify=False)
         return res.json()
 
     @classmethod
@@ -196,22 +222,6 @@ class Model(metaclass=Meta):
         return res_json
 
     @classmethod
-    def get(cls, uid):
-        """Fetches a record by the records ID.
-
-        Args: 
-            uid: The database identifier of the record to fetch, which can be specified either as the
-                primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
-        """
-        url = cls.record_url(uid)
-        print("Getting {} record with ID {}: {}".format(cls.__name__, uid, url))
-        res = requests.get(url=url, headers=Model.HEADERS, verify=False)
-        cls.write_response_html_to_file(res,"get_bob.html")
-        res.raise_for_status()
-        #pdb.set_trace()
-        return res.json()
-
-    @classmethod
     def index(cls):
         """Fetches all records.
 
@@ -225,27 +235,25 @@ class Model(metaclass=Meta):
         res.raise_for_status()
         return res.json()
 
-    @classmethod
-    def patch(cls, uid, payload):
-        """Patches the payload to the specified record.
+    def patch(self,payload):
+        """
+        Patches the payload to the specified record, and udpates the current instance's 'attrs'
+        attribute to reflect the new changes. 
 
         Args: 
-            uid - The database identifier of the record to patch. which can be specified 
-                either as the primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
             payload - hash. This will be JSON-formatted prior to sending the request.
 
         Returns:
-            `dict`. The JSON formatted response. 
+            `NoneType`: None. 
 
         Raises:
             `requests.exceptions.HTTPError`: The status code is not ok.
         """
-        url = cls.record_url(uid)
-        payload = cls.add_model_name_to_payload(payload)
-        res = requests.patch(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
-        cls.write_response_html_to_file(res,"bob.html")
+        payload = self.__class__.add_model_name_to_payload(payload)
+        res = requests.patch(url=self.record_url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
+        self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
-        return res.json()
+        self.attrs = res.json()
 
     @classmethod
     def post(cls, payload):
@@ -258,7 +266,7 @@ class Model(metaclass=Meta):
             `dict`. The JSON formatted response. 
 
         Raises:
-            `requests.exceptions.HTTPError`: The status code is not ok.
+            `Requests.exceptions.HTTPError`: The status code is not ok.
         """
         #Add user to payload 
         payload["user_id"] = 1 #admin user
@@ -268,8 +276,8 @@ class Model(metaclass=Meta):
         res.raise_for_status()
         return res.json()
 
-    @classmethod
-    def write_response_html_to_file(cls,response,filename):
+    @staticmethod
+    def write_response_html_to_file(response,filename):
         """
         An aid in troubleshooting internal application errors, i.e.  <Response [500]>, to be mainly
         beneficial when developing the server-side API. This method will write the response HTML
@@ -327,10 +335,9 @@ class Document(Model):
     MODEL_NAME = "document"
     MODEL_ABBR = "DOC"
 
-    @staticmethod
     def download(rec_id):
         # The sever is Base64 encoding the payload, so we'll need to base64 decode it. 
-        url = Document.record_url(rec_id) + "/download"
+        url = self.record_url + "/download"
         res = requests.get(url=url, headers=Model.HEADERS, verify=False)
         res.raise_for_status()
         data = base64.b64decode(res.json()["data"])
@@ -346,6 +353,61 @@ class TreatmentTermName(Model):
 
 class User(Model):
     MODEL_NAME = "users"
+
+    def archive_user(self, user_id):
+        """Archives the user with the specified user ID. 
+
+        Args:
+            user_id: `int`. The ID of the user to archive.
+
+        Returns:
+            `NoneType`: None. 
+        """
+        url = self.record_url + "/archive"
+        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=Model.HEADERS, verify=False)
+        self.write_response_html_to_file(res,"bob.html")
+        res.raise_for_status()
+
+    def unarchive_user(self, user_id):
+        """Unarchives the user with the specified user ID. 
+
+        Args:
+            user_id: `int`. The ID of the user to unarchive.
+
+        Returns:
+            `NoneType`: None. 
+        """
+        url = self.record_url + "/unarchive"
+        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=Model.HEADERS, verify=False)
+        self.write_response_html_to_file(res,"bob.html")
+        res.raise_for_status()
+    
+    def generate_api_key(self):
+        """
+        Generates an API key for the user, replacing any existing one. 
+
+        Returns:
+            `str`: The new API key.
+        """
+        url = self.record_url + "/generate_api_key"
+        res = requests.patch(url=url, headers=Model.HEADERS, verify=False)
+        self.write_response_html_to_file(res,"bob.html")
+        res.raise_for_status()
+        return res.json()["token"]
+
+    def remove_api_key(self):
+        """
+        Removes the user's existing API key, if present, and sets the current instance's 'api_key'
+        attribute to the empty string. 
+
+        Returns:
+            `NoneType`: None. 
+        """
+        url = self.record_url + "/remove_api_key"
+        res = requests.patch(url=url, headers=Model.HEADERS, verify=False)
+        res.raise_for_status()
+        self.api_key = ""
+
 
 class Vendor(Model):
     MODEL_NAME = "vendor"
