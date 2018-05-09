@@ -343,6 +343,10 @@ class Document(Model):
         data = base64.b64decode(res.json()["data"])
         return data
 
+class Target(Model):
+    MODEL_NAME = "target"
+    MODEL_ABBR = "TRG"
+
 class Treatment(Model):
     MODEL_NAME = "treatment"
     MODEL_ABBR = "TRT"

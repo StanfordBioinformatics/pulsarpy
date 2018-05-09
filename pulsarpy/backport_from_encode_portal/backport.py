@@ -73,27 +73,27 @@ def target(rec_id):
         `dict`: The JSON representation of the existing Target if it already exists in
         in Pulsar, otherwise the POST response.
     """
-    rec = ENC_CONN.get(rec_id, ignore404=False)
+    rec = ENC_CONN.get("targets/" + rec_id, ignore404=False)
     aliases = rec[ALIASES_PROP]
     label = rec["label"]
     label_org_name = label + "-" + rec["organism"]["name"]
     #check if upstream exists already in Pulsar:
-    pulsar_rec = models.Treatment.find_by({UPSTREAM_PROP: [*aliases, rec[UUID_PROP], label_org_name, rec["@id"]]})
+    pulsar_rec = models.Target.find_by({UPSTREAM_PROP: [*aliases, rec[UUID_PROP], label_org_name, rec["@id"]]})
     if pulsar_rec:
         return pulsar_rec
+    print("Importing target '{}'".format(rec_id))
     payload = {}
     payload[UPSTREAM_PROP] = label_org_name
     payload["name"] = label
     xrefs = rec["dbxref"]
     for ref in xrefs:
       prefix, ref = ref.split(":")
-      if prefix == "ENSEMBL"
+      if prefix == "ENSEMBL":
         payload["ensembl"] = ref
-      elif prefix == "UniProtKB"
+      elif prefix == "UniProtKB":
         payload["uniprotkb"] = ref
-      elif prefix == "RefSeq"
+      elif prefix == "RefSeq":
         payload["refseq"] = ref
-  end
     return models.Target.post(payload)
 def biosample(rec_id):
     """
