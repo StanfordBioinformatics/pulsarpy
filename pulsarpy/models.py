@@ -6,23 +6,23 @@
 # nathankw@stanford.edu
 ###
 
-"""
-Required Environment Variables:
-  1) PULSAR_API_URL
-  2) PULSAR_TOKEN
-"""
-
-import base64
-import os
-import json
-import requests
-import pdb
-
-import inflection
-
 # pip install reflection.
 # Ported from RoR's inflector.
 # See https://inflection.readthedocs.io/en/latest/.
+"""
+A client that contains classes named after each model in Pulsar to handle RESTful communication with
+the Pulsar API. 
+"""
+
+import base64
+import inflection
+import json
+import logging
+import os
+import requests
+import pdb
+
+import pulsarpy as p
 
 # Curl Examples
 #
@@ -31,24 +31,24 @@ import inflection
 #    curl -X POST
 #       -d "construct_tags[name]=plasmid3"
 #       -H "Accept: application/json"
-#       -H "Authorization: Token token=${TOKEN}" http://localhost:3000/api/construct_tags
+#       -H "Authorization: Token token=${API_TOKEN}" http://localhost:3000/api/construct_tags
 #
 # 2) Update the construct tag with ID of 3:
 #
 #     curl -X PUT
 #       -d "construct_tag[name]=AMP"
 #       -H "Accept: application/json"
-#       -H "Authorization: Token token=${TOKEN}" http://localhost:3000/api/construct_tags/3"
+#       -H "Authorization: Token token=${API_TOKEN}" http://localhost:3000/api/construct_tags/3"
 #
 # 2) Get a construct_tag:
 #
 #     curl -H "Accept: application/json"
-#        -H "Authorization: Token token=${TOKEN}" http://localhost:3000/api/construct_tags/5
+#        -H "Authorization: Token token=${API_TOKEN}" http://localhost:3000/api/construct_tags/5
 ###
 
 # Python examples using the 'requests' module
 #
-# HEADERS = {'content-type': 'application/json', 'Authorization': 'Token token={}'.format(TOKEN)}
+# HEADERS = {'content-type': 'application/json', 'Authorization': 'Token token={}'.format(API_TOKEN)}
 # URL="http://localhost:3000/api/construct_tags"
 # 1) Call 'index' method of a construct_tag:
 #
@@ -69,56 +69,117 @@ def remove_model_prefix(uid):
     Removes the optional model prefix from the given primary ID. For example, given the biosample
     record whose primary ID is 8, and given the fact that the model prefix for the Biosample model
     is "B-", the record ID can be specified either as 8 or B-8. However, the model prefix needs to
-    be stripped off prior to making API calls. 
+    be stripped off prior to making API calls.
     """
-    
+
     return str(uid).split("-")[-1]
 
 class Meta(type):
+    @staticmethod
+    def get_logfile_name(tag):
+        """
+        Creates a name for a log file that is meant to be used in a call to
+        ``logging.FileHandler``. The log file name will incldue the path to the log directory given
+        by the `p.LOG_DIR` constant. The format of the file name is: 'log_$HOST_$TAG.txt', where 
+
+        $HOST is the hostname part of the URL given by ``URL``, and $TAG is the value of the 
+        'tag' argument. The log directory will be created if need be.
+    
+        Args:
+            tag: `str`. A tag name to add to at the end of the log file name for clarity on the
+                log file's purpose.
+        """
+        if not os.path.exists(p.LOG_DIR):
+            os.mkdir(p.LOG_DIR)
+        filename = "log_" + p.HOST + "_" + tag + ".txt"
+        filename = os.path.join(p.LOG_DIR, filename)
+        return filename
+
+    @staticmethod
+    def add_file_handler(logger, level, tag):
+        """
+        Adds a ``logging.FileHandler`` handler to the specified ``logging`` instance that will log
+        the messages it receives at the specified error level or greater.  The log file name will
+        be of the form log_$HOST_$TAG.txt, where $HOST is the hostname part of the URL given
+        by ``p.URL``, and $TAG is the value of the 'tag' argument.
+    
+        Args:
+            logger: The `logging.Logger` instance to add the `logging.FileHandler` to.
+            level:  `int`. A logging level (i.e. given by one of the constants `logging.DEBUG`,
+                `logging.INFO`, `logging.WARNING`, `logging.ERROR`, `logging.CRITICAL`).
+            tag: `str`. A tag name to add to at the end of the log file name for clarity on the
+                log file's purpose.
+        """
+        f_formatter = logging.Formatter('%(asctime)s:%(name)s:\t%(message)s')
+        filename = Meta.get_logfile_name(tag)
+        handler = logging.FileHandler(filename=filename, mode="a")
+        handler.setLevel(level)
+        handler.setFormatter(f_formatter)
+        logger.addHandler(handler)
+
     def __init__(newcls, classname, supers, classdict):
-        newcls.URL = os.path.join(newcls.URL, inflection.pluralize(newcls.MODEL_NAME))
+        newcls.URL = os.path.join(p.URL, inflection.pluralize(newcls.MODEL_NAME))
 
 
 class Model(metaclass=Meta):
     """
     The superclass of all model classes. A model subclass is defined for each Rails model.
-    An instance of a model class represents a record of the given Rails model.  
+    An instance of a model class represents a record of the given Rails model.
 
-    Subclasses don't typically define their own init method, but if they do, they need to make a call 
-    to 'super' to run the init method defined here as well. 
+    Subclasses don't typically define their own init method, but if they do, they need to make a call
+    to 'super' to run the init method defined here as well.
 
     Subclasses must be instantiated with the rec_id argument set to a record's ID. A GET will
-    immediately be done and the record's attributes will be stored in the self.attrs `dict`. 
+    immediately be done and the record's attributes will be stored in the self.attrs `dict`.
     The record's attributes can be accessed as normal instance attributes (i.e. ``record.name) rather than explicitly
     indexing the attrs dictionary, thanks to the employment of ``__getattr__()``. Similarly, record
-    attributes can be updated via normal assignment operations, i.e. (``record.name = "bob"``), 
+    attributes can be updated via normal assignment operations, i.e. (``record.name = "bob"``),
     thanks to employment of ``__setattr__()``.
 
-    Configuration: Required environment variables are:
-
-      1.  PULSAR_API_URL
-      2.  PULSAR_TOKEN
-
-    
-
+    Required Environment Variables:
+        1) PULSAR_API_URL
+        2) PULSAR_TOKEN
     """
-    URL = os.environ["PULSAR_API_URL"]
-    TOKEN = os.environ["PULSAR_TOKEN"]
-    HEADERS = {'content-type': 'application/json', 'Authorization': 'Token token={}'.format(TOKEN)}
     MODEL_NAME = ""  # subclasses define
+    HEADERS = {'content-type': 'application/json', 'Authorization': 'Token token={}'.format(p.API_TOKEN)}
+
+    #: A reference to the `debug` logging instance that was created earlier in ``encode_utils.debug_logger``.
+    #: This class adds a file handler, such that all messages sent to it are logged to this
+    #: file in addition to STDOUT.
+    debug_logger = logging.getLogger(p.DEBUG_LOGGER_NAME)
+
+    # Add debug file handler to debug_logger:
+    Meta.add_file_handler(logger=debug_logger, level=logging.DEBUG, tag="debug")
+
+    #: A ``logging`` instance with a file handler for logging terse error messages.
+    #: The log file resides locally within the directory specified by the constant
+    #: ``p.LOG_DIR``. Accepts messages >= ``logging.ERROR``.
+    error_logger = logging.getLogger(p.ERROR_LOGGER_NAME)
+    log_level = logging.ERROR
+    error_logger.setLevel(log_level)
+    Meta.add_file_handler(logger=error_logger, level=log_level, tag="error")
+
+    #: A ``logging`` instance with a file handler for logging successful POST operations.
+    #: The log file resides locally within the directory specified by the constant
+    #: ``p.LOG_DIR``. Accepts messages >= ``logging.INFO``.
+    post_logger = logging.getLogger(p.POST_LOGGER_NAME)
+    log_level = logging.INFO
+    post_logger.setLevel(log_level)
+    Meta.add_file_handler(logger=post_logger, level=log_level, tag="posted")
 
     def __init__(self, rec_id):
         """
-        Args: 
+        Args:
             uid: The database identifier of the record to fetch, which can be specified either as the
                 primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
         """
         # self.attrs will store the actual record's attributes. Initialize value now to empty dict
-        # since it is expected to be set already in self.__setattr__(). 
+        # since it is expected to be set already in self.__setattr__().
         self.__dict__["attrs"] = {}
         self.rec_id = str(rec_id).split("-")[-1]
         self.record_url = os.path.join(self.URL, self.rec_id)
-        self.__dict__["attrs"] = self._get() #avoid call to self.__setitem__() for this attr. 
+        self.__dict__["attrs"] = self._get() #avoid call to self.__setitem__() for this attr.
+        self.log_error("Connecting to {}".format(self.dcc_host))
 
     def __getattr__(self, name):
         """
@@ -141,7 +202,7 @@ class Model(metaclass=Meta):
         """Fetches a record by the records ID.
         """
         print("Getting {} record with ID {}: {}".format(self.__class__.__name__, self.rec_id, self.record_url))
-        res = requests.get(url=self.record_url, headers=Model.HEADERS, verify=False)
+        res = requests.get(url=self.record_url, headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"get_bob.html")
         res.raise_for_status()
         #pdb.set_trace()
@@ -149,12 +210,20 @@ class Model(metaclass=Meta):
         return res.json()
 
     @classmethod
+    def log_post(cls, res_json):
+        msg = cls.__name__ + "\t" + str(res_json["id"]) + "\t"
+        name = res_json.get("name")
+        if name:
+            msg += name
+        cls.post_logger.info(msg + "\n")
+
+    @classmethod
     def add_model_name_to_payload(cls, payload):
         """
         Checks whether the model name in question is in the payload. If not, the entire payload
-        is set as a value of a key by the name of the model.  This method is useful when some 
+        is set as a value of a key by the name of the model.  This method is useful when some
         server-side Rails API calls expect the parameters to include the parameterized model name.
-        For example, server-side endpoints that handle the updating of a biosample record or the 
+        For example, server-side endpoints that handle the updating of a biosample record or the
         creation of a new biosmample record will expect the payload to be of the form::
 
             { "biosample": {
@@ -165,10 +234,10 @@ class Model(metaclass=Meta):
             }
 
         Args:
-            payload: `dict`. The data to send in an HTTP request. 
+            payload: `dict`. The data to send in an HTTP request.
 
         Returns:
-            `dict`. 
+            `dict`.
         """
         if not cls.MODEL_NAME in payload:
             payload = {cls.MODEL_NAME: payload}
@@ -177,7 +246,7 @@ class Model(metaclass=Meta):
     def delete(self):
         """Deletes the record.
         """
-        res = requests.delete(url=self.record_url, headers=Model.HEADERS, verify=False)
+        res = requests.delete(url=self.record_url, headers=self.HEADERS, verify=False)
         return res.json()
 
     @classmethod
@@ -186,10 +255,10 @@ class Model(metaclass=Meta):
         Searches the model in question by AND joining the query parameters.
 
         Implements a Railsy way of looking for a record using a method by the same name and passing
-        in the query as a dict. as well. 
+        in the query as a dict. as well.
 
         Only the first hit is returned, and there is not particular ordering specified in the server-side
-        API method. 
+        API method.
 
         Args:
             payload: `dict`. The attributes of a record to restrict the search to.
@@ -201,14 +270,14 @@ class Model(metaclass=Meta):
         url = os.path.join(cls.URL, "find_by")
         payload = {"find_by": payload}
         print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
-        res = requests.post(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
+        res = requests.post(url=url, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
         res_json = res.json()
         if res_json:
            try:
                res_json = res_json[cls.MODEL_NAME]
            except KeyError:
-               # Key won't be present if there isn't a serializer for it on the server. 
+               # Key won't be present if there isn't a serializer for it on the server.
                pass
         return res_json
 
@@ -221,11 +290,11 @@ class Model(metaclass=Meta):
         in the query as a string (for the OR operator joining to be specified).
 
         Only the first hit is returned, and there is not particular ordering specified in the server-side
-        API method. 
+        API method.
 
         Args:
             payload: `dict`. The attributes of a record to search for by using OR operator joining
-                for each query parameter. 
+                for each query parameter.
 
         Returns:
             `dict`: The JSON serialization of the record, if any, found by the API call.
@@ -234,14 +303,14 @@ class Model(metaclass=Meta):
         url = os.path.join(cls.URL, "find_by_or")
         payload = {"find_by_or": payload}
         print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
-        res = requests.post(url=url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
+        res = requests.post(url=url, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
         res_json = res.json()
         if res_json:
            try:
                res_json = res_json[cls.MODEL_NAME]
            except KeyError:
-               # Key won't be present if there isn't a serializer for it on the server. 
+               # Key won't be present if there isn't a serializer for it on the server.
                pass
         return res_json
 
@@ -250,31 +319,31 @@ class Model(metaclass=Meta):
         """Fetches all records.
 
         Returns:
-            `dict`. The JSON formatted response. 
+            `dict`. The JSON formatted response.
 
         Raises:
             `requests.exceptions.HTTPError`: The status code is not ok.
         """
-        res = requests.get(cls.URL, headers=Model.HEADERS, verify=False)
+        res = requests.get(cls.URL, headers=cls.HEADERS, verify=False)
         res.raise_for_status()
         return res.json()
 
     def patch(self,payload):
         """
         Patches current record and udpates the current instance's 'attrs'
-        attribute to reflect the new changes. 
+        attribute to reflect the new changes.
 
-        Args: 
+        Args:
             payload - hash. This will be JSON-formatted prior to sending the request.
 
         Returns:
-            `NoneType`: None. 
+            `NoneType`: None.
 
         Raises:
             `requests.exceptions.HTTPError`: The status code is not ok.
         """
         payload = self.__class__.add_model_name_to_payload(payload)
-        res = requests.patch(url=self.record_url, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
+        res = requests.patch(url=self.record_url, data=json.dumps(payload), headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
         self.attrs = res.json()
@@ -283,22 +352,23 @@ class Model(metaclass=Meta):
     def post(cls, payload):
         """Posts the data to the specified record.
 
-        Args: 
+        Args:
             payload: `dict`. This will be JSON-formatted prior to sending the request.
 
         Returns:
-            `dict`. The JSON formatted response. 
+            `dict`. The JSON formatted response.
 
         Raises:
             `Requests.exceptions.HTTPError`: The status code is not ok.
         """
-        #Add user to payload 
-        payload["user_id"] = 1 #admin user
         payload = cls.add_model_name_to_payload(payload)
-        res = requests.post(url=cls.URL, data=json.dumps(payload), headers=Model.HEADERS, verify=False)
+        cls.debug_logger.debug("POSTING payload {}".format(json.dumps(payload, indent=4)))
+        res = requests.post(url=cls.URL, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
-        return res.json()
+        res = res.json()
+        cls.log_post(res)
+        return res
 
     @staticmethod
     def write_response_html_to_file(response,filename):
@@ -306,10 +376,10 @@ class Model(metaclass=Meta):
         An aid in troubleshooting internal application errors, i.e.  <Response [500]>, to be mainly
         beneficial when developing the server-side API. This method will write the response HTML
         for viewing the error details in the browesr.
-      
+
         Args:
-            response: `requests.models.Response` instance. 
-            filename: `str`. The output file name. 
+            response: `requests.models.Response` instance.
+            filename: `str`. The output file name.
         """
         fout = open(filename,'w')
         fout.write(response.text)
@@ -368,9 +438,9 @@ class Document(Model):
     MODEL_ABBR = "DOC"
 
     def download(rec_id):
-        # The sever is Base64 encoding the payload, so we'll need to base64 decode it. 
+        # The sever is Base64 encoding the payload, so we'll need to base64 decode it.
         url = self.record_url + "/download"
-        res = requests.get(url=url, headers=Model.HEADERS, verify=False)
+        res = requests.get(url=url, headers=self.HEADERS, verify=False)
         res.raise_for_status()
         data = base64.b64decode(res.json()["data"])
         return data
@@ -391,42 +461,42 @@ class User(Model):
     MODEL_NAME = "users"
 
     def archive_user(self, user_id):
-        """Archives the user with the specified user ID. 
+        """Archives the user with the specified user ID.
 
         Args:
             user_id: `int`. The ID of the user to archive.
 
         Returns:
-            `NoneType`: None. 
+            `NoneType`: None.
         """
         url = self.record_url + "/archive"
-        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=Model.HEADERS, verify=False)
+        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
 
     def unarchive_user(self, user_id):
-        """Unarchives the user with the specified user ID. 
+        """Unarchives the user with the specified user ID.
 
         Args:
             user_id: `int`. The ID of the user to unarchive.
 
         Returns:
-            `NoneType`: None. 
+            `NoneType`: None.
         """
         url = self.record_url + "/unarchive"
-        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=Model.HEADERS, verify=False)
+        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
-    
+
     def generate_api_key(self):
         """
-        Generates an API key for the user, replacing any existing one. 
+        Generates an API key for the user, replacing any existing one.
 
         Returns:
             `str`: The new API key.
         """
         url = self.record_url + "/generate_api_key"
-        res = requests.patch(url=url, headers=Model.HEADERS, verify=False)
+        res = requests.patch(url=url, headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
         return res.json()["token"]
@@ -434,13 +504,13 @@ class User(Model):
     def remove_api_key(self):
         """
         Removes the user's existing API key, if present, and sets the current instance's 'api_key'
-        attribute to the empty string. 
+        attribute to the empty string.
 
         Returns:
-            `NoneType`: None. 
+            `NoneType`: None.
         """
         url = self.record_url + "/remove_api_key"
-        res = requests.patch(url=url, headers=Model.HEADERS, verify=False)
+        res = requests.patch(url=url, headers=self.HEADERS, verify=False)
         res.raise_for_status()
         self.api_key = ""
 

@@ -10,8 +10,8 @@
 """
 Given a tab-delimited sheet, imports records of the specified Model into Pulsar LIMS. 
 """
-
 import argparse
+import pdb
 
 import pulsarpy.models as models
 import pulsarpy.utils
@@ -36,17 +36,19 @@ def main():
     model = getattr(models, args.model)
     fh = open(infile)
     header = fh.readline().strip().split("\t")
-    field_positions = [header.index(x) for x in header if not x.startswith("#")]
+    field_positions = [header.index(x) for x in header if not x.startswith("#") and x.strip()]
+    line_cnt = 1 # Already read header line
     for line in fh:
+        line_cnt += 1
         if line.startswith("#"):
             continue
         payload = {}
         line = line.strip().split("\t")
         for pos in field_positions:
             payload[header[pos]] = line[pos].strip()
-            model.post(payload)
-
-
+        print("Submitting line {}".format(line_cnt))
+        res = model.post(payload)
+        print(res)
 
 if __name__ == "__main__":
     main()
