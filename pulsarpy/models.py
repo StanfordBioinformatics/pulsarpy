@@ -80,6 +80,28 @@ class Meta(type):
 
 
 class Model(metaclass=Meta):
+    """
+    The superclass of all model classes. A model subclass is defined for each Rails model.
+    An instance of a model class represents a record of the given Rails model.  
+
+    Subclasses don't typically define their own init method, but if they do, they need to make a call 
+    to 'super' to run the init method defined here as well. 
+
+    Subclasses must be instantiated with the rec_id argument set to a record's ID. A GET will
+    immediately be done and the record's attributes will be stored in the self.attrs `dict`. 
+    The record's attributes can be accessed as normal instance attributes (i.e. ``record.name) rather than explicitly
+    indexing the attrs dictionary, thanks to the employment of ``__getattr__()``. Similarly, record
+    attributes can be updated via normal assignment operations, i.e. (``record.name = "bob"``), 
+    thanks to employment of ``__setattr__()``.
+
+    Configuration: Required environment variables are:
+
+      1.  PULSAR_API_URL
+      2.  PULSAR_TOKEN
+
+    
+
+    """
     URL = os.environ["PULSAR_API_URL"]
     TOKEN = os.environ["PULSAR_TOKEN"]
     HEADERS = {'content-type': 'application/json', 'Authorization': 'Token token={}'.format(TOKEN)}
@@ -91,6 +113,8 @@ class Model(metaclass=Meta):
             uid: The database identifier of the record to fetch, which can be specified either as the
                 primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
         """
+        # self.attrs will store the actual record's attributes. Initialize value now to empty dict
+        # since it is expected to be set already in self.__setattr__(). 
         self.__dict__["attrs"] = {}
         self.rec_id = str(rec_id).split("-")[-1]
         self.record_url = os.path.join(self.URL, self.rec_id)
@@ -237,7 +261,7 @@ class Model(metaclass=Meta):
 
     def patch(self,payload):
         """
-        Patches the payload to the specified record, and udpates the current instance's 'attrs'
+        Patches current record and udpates the current instance's 'attrs'
         attribute to reflect the new changes. 
 
         Args: 
@@ -323,6 +347,10 @@ class ConstructTag(Model):
     MODEL_NAME = "construct_tag"
     MODEL_ABBR = "CT"
 
+class CrisprConstruct(Model):
+    MODEL_NAME = "crispr_construct"
+    MODEL_ABBR = "CC"
+
 class CrisprModification(Model):
     MODEL_NAME = "crispr_modification"
     MODEL_ABBR = "CRISPR"
@@ -330,6 +358,10 @@ class CrisprModification(Model):
 class Donor(Model):
     MODEL_NAME = "donor"
     MODEL_ABBR = "DON"
+
+class DonorConstruct(Model):
+    MODEL_NAME = "donor_construct"
+    MODEL_ABBR = "DONC"
 
 class Document(Model):
     MODEL_NAME = "document"
