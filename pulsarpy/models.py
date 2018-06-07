@@ -215,7 +215,7 @@ class Model(metaclass=Meta):
         name = res_json.get("name")
         if name:
             msg += name
-        cls.post_logger.info(msg + "\n")
+        cls.post_logger.info(msg)
 
     @classmethod
     def add_model_name_to_payload(cls, payload):
@@ -365,10 +365,24 @@ class Model(metaclass=Meta):
         cls.debug_logger.debug("POSTING payload {}".format(json.dumps(payload, indent=4)))
         res = requests.post(url=cls.URL, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
+        if not res.ok:
+            cls.log_error(res.text)
         res.raise_for_status()
         res = res.json()
         cls.log_post(res)
         return res
+
+    @classmethod
+    def log_error(cls, msg):
+        """
+        Logs the provided error message to both the error logger and the debug logger logging
+        instances.
+        
+        Args:
+            msg: `str`. The error message to log.
+        """
+        cls.error_logger.error(msg) 
+        cls.debug_logger.debug(msg) 
 
     @staticmethod
     def write_response_html_to_file(response,filename):

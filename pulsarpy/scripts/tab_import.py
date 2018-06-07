@@ -11,7 +11,6 @@
 Given a tab-delimited sheet, imports records of the specified Model into Pulsar LIMS. 
 """
 import argparse
-import pdb
 
 import pulsarpy.models as models
 import pulsarpy.utils
@@ -35,7 +34,7 @@ def main():
     infile = args.infile
     model = getattr(models, args.model)
     fh = open(infile)
-    header = fh.readline().strip().split("\t")
+    header = fh.readline().strip("\n").split("\t")
     field_positions = [header.index(x) for x in header if not x.startswith("#") and x.strip()]
     line_cnt = 1 # Already read header line
     for line in fh:
@@ -43,12 +42,12 @@ def main():
         if line.startswith("#"):
             continue
         payload = {}
-        line = line.strip().split("\t")
+        line = line.strip("\n").split("\t")
         for pos in field_positions:
             payload[header[pos]] = line[pos].strip()
         print("Submitting line {}".format(line_cnt))
         res = model.post(payload)
-        print(res)
+        print("Success: ID {}".format(res["id"]))
 
 if __name__ == "__main__":
     main()
