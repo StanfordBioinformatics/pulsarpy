@@ -22,7 +22,7 @@ ALIASES_PROP = "aliases"
 UPSTREAM_PROP = "upstream_identifier"
 UUID_PROP = "uuid"
 ENC_CONN = euc.Connection("prod")
-ADMIN_USER_ID = models.User.find_by({"email": "admin@enc.com"})
+ADMIN_USER_ID = models.User.find_by({"email": "admin@enc.com"})["id"]
 
 # Biosamples to import for Jessika:
 # https://www.encodeproject.org/search/?type=Biosample&lab.title=Michael+Snyder%2C+Stanford&award.rfa=ENCODE4&biosample_type=tissue
@@ -95,7 +95,8 @@ def target(rec_id):
       elif prefix == "RefSeq":
         payload["refseq"] = ref
     return models.Target.post(payload)
-def biosample(rec_id):
+
+def biosample(rec_id, patch=False):
     """
     Backports a biosample record belonging to
     https://www.encodeproject.org/profiles/biosample.json into the Pulsar model called
@@ -112,61 +113,93 @@ def biosample(rec_id):
         `dict`: The JSON representation of the existing Biosample if it already exists
         in Pulsar, otherwise the POST response.
     """
-    rec = ENC_CONN.get(rec_id, ignore404=False)
-    aliases = rec[ALIASES_PROP]
-    accession = rec[ACCESSION_PROP]
+    dcc_rec = ENC_CONN.get(rec_id, ignore404=False)
+    aliases = dcc_rec[ALIASES_PROP]
+    accession = dcc_rec[ACCESSION_PROP]
     # Check if upstream exists already in Pulsar:
-    pulsar_rec = models.Biosample.find_by({UPSTREAM_PROP: [*aliases, accession, rec[UUID_PROP], rec["@id"]]})
-    if pulsar_rec:
-        return pulsar_rec
+    pulsar_rec = models.Biosample.find_by({UPSTREAM_PROP: [*aliases, accession, dcc_rec[UUID_PROP], dcc_rec["@id"]]})
+    # If the record was found, then don't post it, but may still need to backport any additional
+    # "has" and "has_many" relations that may be new. 
     payload = {}
     payload[UPSTREAM_PROP] = accession
-    payload["name"] = set_name(rec)
-    btn = rec["biosample_term_name"]
-    bti = rec["biosample_term_id"]
+    payload["name"] = set_name(dcc_rec)
+    btn = dcc_rec["biosample_term_name"]
+    bti = dcc_rec["biosample_term_id"]
     pulsar_btn_rec = biosample_term_name(biosample_term_name=btn, biosample_term_id=bti)
     payload["biosample_term_name_id"] = pulsar_btn_rec["id"]
     # biosample_type should already be in Pulsar.biosample_type, so won't check to add it first.
-    payload["biosample_type_id"] = models.BiosampleType.find_by({"name": rec["biosample_type"]})["id"]
-    date_obtained = rec.get("date_obtained")
+    payload["biosample_type_id"] = models.BiosampleType.find_by({"name": dcc_rec["biosample_type"]})["id"]
+    date_obtained = dcc_rec.get("date_obtained")
     if not date_obtained:
-        date_obtained = rec.get("culture_harvest_date")
+        date_obtained = dcc_rec.get("culture_harvest_date")
     payload["date_biosample_taken"] = date_obtained
-    payload["description"] = rec.get("description")
-    payload["donor_id"] = donor(rec["donor"])["id"]
-    payload["lot_identifier"] = rec.get("lot_id")
-    payload["nih_institutional_certification"] = rec.get("nih_institutional_certification")
-    part_of_biosample = rec.get("part_of")
+    payload["description"] = dcc_rec.get("description")
+    payload["donor_id"] = donor(dcc_rec["donor"]["@id"])["id"]
+    payload["lot_identifier"] = dcc_rec.get("lot_id")
+    payload["nih_institutional_certification"] = dcc_rec.get("nih_institutional_certification")
+    part_of_biosample = dcc_rec.get("part_of")
     if part_of_biosample:
        # Backport the parent.
        pulsar_parent = biosample(part_of_biosample)
        payload["part_of_biosample_id"] = pulsar_parent["id"]
-    payload["tissue_preservation_method"] = rec.get("preservation_method")
-    payload["passage_number"] = rec.get("passage_number")
-    payload["starting_amount"] = rec.get("starting_amount")
-    payload["starting_amount_units"] = rec.get("starting_amount_units")
-    payload["vendor_id"] = vendor(rec["source"])["id"]
-    payload["vendor_product_identifier"] = rec.get("product_id")
+    payload["tissue_preservation_method"] = dcc_rec.get("preservation_method")
+    payload["passage_number"] = dcc_rec.get("passage_number")
+    payload["starting_amount"] = dcc_rec.get("starting_amount")
+    payload["starting_amount_units"] = dcc_rec.get("starting_amount_units")
+    payload["vendor_id"] = vendor(dcc_rec["source"]["@id"])["id"]
+    payload["vendor_product_identifier"] = dcc_rec.get("product_id")
 
-    treatments = rec["treatments"]
+    post = False
+    if not pulsar_rec:
+        post = True
+        pulsar_rec = models.Biosample.post(payload)
+
+    pulsar_obj = models.Biosample(pulsar_rec["id"])
+    del pulsar_rec
+    if patch and not post: #don't do both
+        pulsar_obj.patch(payload)
+
+    # Patch in any documents (has_many relationship)
+    document_ids = dcc_rec["documents"] # list of DCC identifiers
+    existing_document_ids = [x["id"] for x in pulsar_obj.documents]
+    payload = {}
+    payload["document_ids"] = []
+    for doc in documents_ids:
+        pulsar_doc_rec_id = document(doc)["id"]
+        if not pulsar_doc_rec_id in existing_document_ids:
+            payload["document_ids"].append(pulsar_doc_rec_id)
+    if payload["document_ids"]:
+       pulsar_obj.patch(payload)
+    payload = {}
+        
+    # Patch in any treatments (has_many relationship)
+    treatments_ids = dcc_rec["treatments"] # list of DCC identifiers
+    existing_treatment_ids = [x["id"] for x in pulsar_obj.treatments]
+    payload = {}
     payload["treatment_ids"] = []
-    for treat in treatments:
-        pulsar_treat_rec = treatment(treat["uuid"])
-        payload["treatment_ids"].append(pulsar_treat_rec["id"])
+    for treat in treatment_ids:
+        pulsar_treat_rec_id = treatment(treat)["id"]
+        if not pulsar_treat_rec_id in existing_treatment_ids:
+            payload["treatment_ids"].append(pulsar_treat_rec_id)
+    if payload["treatment_ids"]:
+       pulsar_obj.patch(payload)
+    payload = {}
 
-
-    post_response = models.Biosample.post(payload)
     # Check if any CRISPR genetic_modifications and if so, associate with biosample.
     # In Pulsar, a biosample can only have one CRISPR genetic modification, so if there are
     # several here specified from the Portal, than that is a problem.
-    genetic_modifications = rec["genetic_modifications"]
+    genetic_modifications = dcc_rec["genetic_modifications"] # list of DCC identifiers
+    crispr_gm_count = 0
     for g in genetic_modifications:
-        gm = ENC_CONN.get(g["accession"], ignoreo404=False)
+        gm = ENC_CONN.get(g, ignore404=False)
         method = gm["method"]
         if method != "CRISPR":
             continue
-        crispr_modification(pulsar_biosample_id=post_response["id"], encode_gm_json=gm)
-    return post_response
+        crispr_gm_count += 1
+        if crispr_gm_count > 1:
+            raise Exception("Biosample {} has more than 1 genetic modification when only one is expected in Pulsary.".format(pulsar_obj.id))
+        crispr_modification(pulsar_biosample_id=pulsar_obj.id, encode_gm_json=gm)
+    return biosample 
 
 def crispr_modification(pulsar_biosample_id, encode_gm_json):
     """
@@ -188,7 +221,6 @@ def crispr_modification(pulsar_biosample_id, encode_gm_json):
         `dict`: The JSON representation of the existing Document if it already exists in
         in Pulsar, otherwise the POST response.
     """
-    raise Exception("Backporting a CRISPR genetic_modification from the Portal is not fully implemented at this time.")
     aliases = rec[ALIASES_PROP]
     accession = rec[ACCESSION_PROP]
     # Check if upstream exists already in Pulsar:
