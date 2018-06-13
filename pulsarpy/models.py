@@ -179,7 +179,7 @@ class Model(metaclass=Meta):
         self.rec_id = str(rec_id).split("-")[-1]
         self.record_url = os.path.join(self.URL, self.rec_id)
         self.__dict__["attrs"] = self._get() #avoid call to self.__setitem__() for this attr.
-        self.log_error("Connecting to {}".format(self.dcc_host))
+        self.log_error("Connecting to {}".format(p.URL))
 
     def __getattr__(self, name):
         """
@@ -199,7 +199,7 @@ class Model(metaclass=Meta):
 
 
     def _get(self):
-        """Fetches a record by the records ID.
+        """Fetches a record by the record's ID.
         """
         print("Getting {} record with ID {}: {}".format(self.__class__.__name__, self.rec_id, self.record_url))
         res = requests.get(url=self.record_url, headers=self.HEADERS, verify=False)
@@ -328,7 +328,7 @@ class Model(metaclass=Meta):
         res.raise_for_status()
         return res.json()
 
-    def patch(self,payload):
+    def patch(self, payload, append_to_arrays=True):
         """
         Patches current record and udpates the current instance's 'attrs'
         attribute to reflect the new changes.
@@ -342,6 +342,11 @@ class Model(metaclass=Meta):
         Raises:
             `requests.exceptions.HTTPError`: The status code is not ok.
         """
+        if append_to_arrays:
+            for key in payload:
+                val = payload[key]
+                if type(val) == list:
+                    payload[val] = list(set([getattr(self, key), val]))
         payload = self.__class__.add_model_name_to_payload(payload)
         res = requests.patch(url=self.record_url, data=json.dumps(payload), headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")

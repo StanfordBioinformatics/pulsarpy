@@ -146,6 +146,7 @@ def biosample(rec_id, patch=False):
     payload["passage_number"] = dcc_rec.get("passage_number")
     payload["starting_amount"] = dcc_rec.get("starting_amount")
     payload["starting_amount_units"] = dcc_rec.get("starting_amount_units")
+    payload["submitter_comments"] = dcc_rec.get("submitter_comments")
     payload["vendor_id"] = vendor(dcc_rec["source"]["@id"])["id"]
     payload["vendor_product_identifier"] = dcc_rec.get("product_id")
 
@@ -160,26 +161,26 @@ def biosample(rec_id, patch=False):
         pulsar_obj.patch(payload)
 
     # Patch in any documents (has_many relationship)
-    document_ids = dcc_rec["documents"] # list of DCC identifiers
-    existing_document_ids = [x["id"] for x in pulsar_obj.documents]
+    dcc_document_ids = dcc_rec["documents"] # list of DCC identifiers
+    linked_document_ids = [x["id"] for x in pulsar_obj.documents]
     payload = {}
     payload["document_ids"] = []
-    for doc in documents_ids:
+    for doc in dcc_document_ids:
         pulsar_doc_rec_id = document(doc)["id"]
-        if not pulsar_doc_rec_id in existing_document_ids:
+        if not pulsar_doc_rec_id in linked_document_ids:
             payload["document_ids"].append(pulsar_doc_rec_id)
     if payload["document_ids"]:
        pulsar_obj.patch(payload)
     payload = {}
         
     # Patch in any treatments (has_many relationship)
-    treatments_ids = dcc_rec["treatments"] # list of DCC identifiers
-    existing_treatment_ids = [x["id"] for x in pulsar_obj.treatments]
+    dcc_treatment_ids = dcc_rec["treatments"] # list of DCC identifiers
+    linked_treatment_ids = [x["id"] for x in pulsar_obj.treatments]
     payload = {}
     payload["treatment_ids"] = []
-    for treat in treatment_ids:
+    for treat in dcc_treatment_ids:
         pulsar_treat_rec_id = treatment(treat)["id"]
-        if not pulsar_treat_rec_id in existing_treatment_ids:
+        if not pulsar_treat_rec_id in linked_treatment_ids:
             payload["treatment_ids"].append(pulsar_treat_rec_id)
     if payload["treatment_ids"]:
        pulsar_obj.patch(payload)
@@ -188,20 +189,21 @@ def biosample(rec_id, patch=False):
     # Check if any CRISPR genetic_modifications and if so, associate with biosample.
     # In Pulsar, a biosample can only have one CRISPR genetic modification, so if there are
     # several here specified from the Portal, than that is a problem.
-    genetic_modifications = dcc_rec["genetic_modifications"] # list of DCC identifiers
-    crispr_gm_count = 0
-    for g in genetic_modifications:
-        gm = ENC_CONN.get(g, ignore404=False)
-        method = gm["method"]
-        if method != "CRISPR":
-            continue
-        crispr_gm_count += 1
-        if crispr_gm_count > 1:
-            raise Exception("Biosample {} has more than 1 genetic modification when only one is expected in Pulsary.".format(pulsar_obj.id))
-        crispr_modification(pulsar_biosample_id=pulsar_obj.id, encode_gm_json=gm)
-    return biosample 
+    # CANT backport GMS, see note in the method genetic_modification.
+#    dcc_genetic_modification_ids = dcc_rec["genetic_modifications"] # list of DCC identifiers
+#    crispr_gm_count = 0
+#    for g in dcc_genetic_modifications_ids:
+#        gm = ENC_CONN.get(g, ignore404=False)
+#        method = gm["method"]
+#        if method != "CRISPR":
+#            continue
+#        crispr_gm_count += 1
+#        if crispr_gm_count > 1:
+#            raise Exception("Biosample {} has more than 1 genetic modification when only one is expected in Pulsary.".format(pulsar_obj.id))
+#        crispr_modification(dcc_rec=gm, pulsar_biosample_id=pulsar_obj.id)
+    return pulsar_obj.attrs
 
-def crispr_modification(pulsar_biosample_id, encode_gm_json):
+def crispr_modification(dcc_rec, pulsar_biosample_id, patch=False):
     """
     Backports a CRISPR genetic_modification record belonging to
     https://www.encodeproject.org/profiles/genetic_modification.json into the Pulsar model called
@@ -209,34 +211,41 @@ def crispr_modification(pulsar_biosample_id, encode_gm_json):
     has the "method" property set to "CRISPR".
 
     Identifying properties on the Portal are "accession", "aliases", and "uuid".
-    Requird properties on the Portal include "category", "method", and "purpose".
+    Required properties on the Portal include "category", "method", and "purpose".
 
     Args:
+        dcc_rec: `dict`. The JSON serialization of a genetic_modification record from
+            the ENCODE Portal.
         pulsar_biosample_id: `int`. The ID of the Biosample record in Pulsar with which to
             associate the genetic modification.
-        encode_gm_json: `dict`. The JSON serialization of a genetic_modification record from
-            the ENCODE Portal.
 
     Returns:
         `dict`: The JSON representation of the existing Document if it already exists in
         in Pulsar, otherwise the POST response.
     """
-    aliases = rec[ALIASES_PROP]
-    accession = rec[ACCESSION_PROP]
+    raise Exception("Currently can't backport genetic_modifications from the ENCODE Portal since the original submissions don't specify anything for the 'reagents' list (where the CRISPR construct and donor construct addgene links are stored). Since a GM requires that those objects be created first in Pulsar, the entire GM objects will need to be manually created.")
+    aliases = dcc_rec[ALIASES_PROP]
+    accession = dcc_rec[ACCESSION_PROP]
     # Check if upstream exists already in Pulsar:
     pulsar_rec = models.CrisprModification.find_by({UPSTREAM_PROP: [*aliases, accession, rec[UUID_PROP], rec["@id"]]})
-    if pulsar_rec:
+    if pulsar_rec and not patch:
         return pulsar_rec
     payload = {}
-    method = rec["method"]
+    method = dcc_rec["method"]
     if method != "CRISPR":
         raise Exception("Only CRISPR gentetic_modifications can be backported into Pulsar at this time.")
+    characterizations = dcc_rec["characterizations"]
+    if characterizations:
+         raise Exception("Error while backporting genetic_modification '{}': Backporting characterizations for crispr modifications is not yet supported.".format(dcc_rec["@id"]))
+    reagents = dcc_rec["reagents"]
+    if reagents:
+         raise Exception("Error while backporting genetic_modification '{}': Backporting reagents for crispr modifications is not yet supported.".format(dcc_rec["@id"]))
+
     payload[UPSTREAM_PROP] = accession
-    payload["name"] = set_name(rec)
-    payload["category"] = rec["category"]
-    payload["purpose"] = rec["purpose"]
-
-
+    payload["name"] = set_name(dcc_rec)
+    payload["category"] = dcc_rec["category"]
+    payload["description"] = dcc_rec["description"]
+    payload["purpose"] = dcc_rec["purpose"]
 
 def biosample_term_name(biosample_term_name, biosample_term_id):
     """
@@ -337,7 +346,7 @@ def donor(rec_id):
     payload["name"] = euu.strip_alias_prefix(aliases[0])
     return models.Donor.post(payload)
 
-def treatment(rec_id):
+def treatment(rec_id, patch=False):
     """
     Backports a treatement record belonging to
     https://www.encodeproject.org/profiles/treatment.json.
@@ -360,19 +369,16 @@ def treatment(rec_id):
     aliases = rec[ALIASES_PROP]
     #check if upstream exists already in Pulsar:
     pulsar_rec = models.Treatment.find_by({UPSTREAM_PROP: [*aliases, rec[UUID_PROP], rec["@id"]]})
-    if pulsar_rec:
+    if pulsar_rec and not patch:
         return pulsar_rec
 
     payload = {}
-    documents = rec["documents"]
-    # Add any linked documents that aren't in Pulsar already:
-    for doc in documents:
-        document(doc)
-    if aliases:
-        upstream_identifier = rec[ALIASES_PROP][0]
-    else:
-        upstream_identifier = rec[UUID_PROP]
-    payload[UPSTREAM_PROP] = upstream_identifier
+    payload["aliases"] = aliases
+    pulsar_document_ids = []
+    for doc_id in rec["documents"]:
+        pulsar_document_ids.append(document(doc_id))
+    payload["document_ids"] = pulsar_document_ids
+    payload[UPSTREAM_PROP] = rec[UUID_PROP] 
     payload["concentration"] = rec["amount"]
     amount_units = rec["amount_units"]
     pulsar_amount_units_rec = models.ConcentrationUnit.find_by(payload={"name": amount_units})
@@ -400,7 +406,11 @@ def treatment(rec_id):
     #The Portal's treatment model doesn't include a name prop or a description prop.
     # Thus, 'name' shall be set to be equal to 'upstream_identifier'.
     payload["name"] = euu.strip_alias_prefix(upstream)
-    return models.Treatment.post(payload)
+    if not pulsar_rec:
+        return models.Treatment.post(payload)
+    else:
+        pulsar_obj = models.Treatment(pulsar_rec["id"])
+        return pulsar_obj.patch(payload)
 
 def treatment_term_name(treatment_term_name, treatment_term_id):
     """
