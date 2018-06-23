@@ -8,7 +8,9 @@
 ###
 
 """
-Given a tab-delimited sheet, imports records of the specified Model into Pulsar LIMS. 
+Given a tab-delimited sheet, imports records of the specified Model into Pulsar LIMS. Array values
+should be comma-delimted as this program will split on the comma and add array literals. Array
+fields are only assumed when the field name has an 'ids' suffix. 
 """
 import argparse
 
@@ -44,7 +46,14 @@ def main():
         payload = {}
         line = line.strip("\n").split("\t")
         for pos in field_positions:
-            payload[header[pos]] = line[pos].strip()
+            val = line[pos].strip()
+            if not val:
+               continue
+            field_name = header[pos]
+            if field_name.endswith("ids"):
+                # An array field (i.e. pooled_from_ids). Split on comma and convert to list:
+                val = [x.strip() for x in val.split(",")]
+            payload[header[pos]] = val
         print("Submitting line {}".format(line_cnt))
         res = model.post(payload)
         print("Success: ID {}".format(res["id"]))

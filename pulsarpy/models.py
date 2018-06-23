@@ -166,6 +166,10 @@ class Model(metaclass=Meta):
     log_level = logging.INFO
     post_logger.setLevel(log_level)
     Meta.add_file_handler(logger=post_logger, level=log_level, tag="posted")
+    log_msg = "-----------------------------------------------------------------------------------"
+    debug_logger.debug(log_msg) 
+    error_logger.error(log_msg) 
+    
 
     def __init__(self, rec_id):
         """
@@ -218,6 +222,20 @@ class Model(metaclass=Meta):
         cls.post_logger.info(msg)
 
     @classmethod
+    def replace_name_with_id(cls, val):
+        """
+        Used to replace a foreign key reference using a name with an ID.
+        """
+        try:
+            int(val)
+            return val #Already a presumed ID.
+        except ValueError:
+            #Not an int, so maybe a name. Look up Biosample record
+            b = cls.find_by({"name": val})
+            return b["id"]
+    
+
+    @classmethod
     def add_model_name_to_payload(cls, payload):
         """
         Checks whether the model name in question is in the payload. If not, the entire payload
@@ -257,7 +275,7 @@ class Model(metaclass=Meta):
         Implements a Railsy way of looking for a record using a method by the same name and passing
         in the query as a dict. as well.
 
-        Only the first hit is returned, and there is not particular ordering specified in the server-side
+        Only the first hit is returned, and there is no particular ordering specified in the server-side
         API method.
 
         Args:
@@ -366,6 +384,14 @@ class Model(metaclass=Meta):
         Raises:
             `Requests.exceptions.HTTPError`: The status code is not ok.
         """
+        for key in payload:
+            if key.endswith("_id"):
+                payload[key] = cls.replace_name_with_id(payload[key])
+            elif key.endswith("_ids"):
+                new_val = []
+                for i in payload[key]:
+                    new_val.append(cls.replace_name_with_id(i))
+                payload[key] = new_val
         payload = cls.add_model_name_to_payload(payload)
         cls.debug_logger.debug("POSTING payload {}".format(json.dumps(payload, indent=4)))
         res = requests.post(url=cls.URL, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
@@ -538,10 +564,10 @@ class Vendor(Model):
     MODEL_NAME = "vendor"
     MODEL_ABBR = "V"
 
-if __name__ == "__main__":
+#if __name__ == "__main__":
     # pdb.set_trace()
     #b = Biosample()
-    res = b.get(uid=1716)
+    #res = b.get(uid=1716)
     #res = b.patch(uid=1772,payload={"name": "bobq_a"})
     #res = b.delete(uid=1719)
     #c = ConstructTag()
