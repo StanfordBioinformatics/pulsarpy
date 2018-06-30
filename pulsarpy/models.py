@@ -141,7 +141,7 @@ class Model(metaclass=Meta):
         2) PULSAR_TOKEN
     """
     MODEL_NAME = ""  # subclasses define
-    HEADERS = {'content-type': 'application/json', 'Authorization': 'Token token={}'.format(p.API_TOKEN)}
+    HEADERS = {'accept': 'application/json', 'content-type': 'application/json', 'Authorization': 'Token token={}'.format(p.API_TOKEN)}
 
     #: A reference to the `debug` logging instance that was created earlier in ``encode_utils.debug_logger``.
     #: This class adds a file handler, such that all messages sent to it are logged to this
@@ -261,10 +261,29 @@ class Model(metaclass=Meta):
             payload = {cls.MODEL_NAME: payload}
         return payload
 
+    @staticmethod
+    def check_boolean_fields(payload):
+        for key in payload:
+            val = payload[key]
+            if type(val) != str:
+                continue
+            val = val.lower()
+            if val == "true":
+                val = True
+                dico[key] = val 
+            elif val == "false":
+                val = False
+                dico[key] = val 
+        return payload
+
     def delete(self):
         """Deletes the record.
         """
         res = requests.delete(url=self.record_url, headers=self.HEADERS, verify=False)
+        #self.write_response_html_to_file(res,"bob_delete.html")
+        if res.status_code == 204: 
+            #No content. Can't render json:
+            return {}
         return res.json()
 
     @classmethod
@@ -323,14 +342,13 @@ class Model(metaclass=Meta):
         print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
         res = requests.post(url=url, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
-        res_json = res.json()
-        if res_json:
+        if res:
            try:
-               res_json = res_json[cls.MODEL_NAME]
+               res = res[cls.MODEL_NAME]
            except KeyError:
                # Key won't be present if there isn't a serializer for it on the server.
                pass
-        return res_json
+        return res
 
     @classmethod
     def index(cls):
@@ -366,6 +384,7 @@ class Model(metaclass=Meta):
                 if type(val) == list:
                     payload[val] = list(set([getattr(self, key), val]))
         payload = self.__class__.add_model_name_to_payload(payload)
+        payload = self.check_boolean_fields(payload)
         res = requests.patch(url=self.record_url, data=json.dumps(payload), headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
@@ -393,6 +412,7 @@ class Model(metaclass=Meta):
                     new_val.append(cls.replace_name_with_id(i))
                 payload[key] = new_val
         payload = cls.add_model_name_to_payload(payload)
+        payload = self.check_boolean_fields(payload)
         cls.debug_logger.debug("POSTING payload {}".format(json.dumps(payload, indent=4)))
         res = requests.post(url=cls.URL, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
@@ -446,6 +466,10 @@ class BiosampleOntology(Model):
     MODEL_NAME = "biosample_ontology"
     MODEL_ABBR = "BO"
 
+class BiosampleReplicate(Model):
+    MODEL_NAME = "biosample_replicate"
+    MODEL_ABBR = "BR"
+
 class BiosampleTermName(Model):
     MODEL_NAME = "biosample_term_name"
     MODEL_ABBR = "BTN"
@@ -453,6 +477,10 @@ class BiosampleTermName(Model):
 class BiosampleType(Model):
     MODEL_NAME = "biosample_type"
     MODEL_ABBR = "BTY"
+
+class ChipseqExperiment(Model):
+    MODEL_NAME = "chipseq_experiment"
+    MODEL_ABBR = "CS"
 
 class ConcentrationUnit(Model):
     MODEL_NAME = "concentration_unit"
@@ -470,6 +498,17 @@ class CrisprModification(Model):
     MODEL_NAME = "crispr_modification"
     MODEL_ABBR = "CRISPR"
 
+    def clone(self, biosample_id):
+       url = self.record_url +  "/clone"
+       print("Cloning with URL {}".format(url))
+       payload = {"biosample_id": biosample_id}
+       res = requests.post(url=url, data=json.dumps(payload), headers=self.HEADERS, verify=False)
+       res.raise_for_status()
+       self.write_response_html_to_file(res,"bob.html")
+       self.debug_logger.debug("Cloned GeneticModification {}".format(self.rec_id))
+       return res.json()
+                
+
 class Donor(Model):
     MODEL_NAME = "donor"
     MODEL_ABBR = "DON"
@@ -482,7 +521,7 @@ class Document(Model):
     MODEL_NAME = "document"
     MODEL_ABBR = "DOC"
 
-    def download(rec_id):
+    def download(self, rec_id):
         # The sever is Base64 encoding the payload, so we'll need to base64 decode it.
         url = self.record_url + "/download"
         res = requests.get(url=url, headers=self.HEADERS, verify=False)
