@@ -222,16 +222,16 @@ class Model(metaclass=Meta):
         cls.post_logger.info(msg)
 
     @classmethod
-    def replace_name_with_id(cls, val):
+    def replace_name_with_id(model, name):
         """
         Used to replace a foreign key reference using a name with an ID.
         """
         try:
-            int(val)
-            return val #Already a presumed ID.
+            int(name)
+            return name #Already a presumed ID.
         except ValueError:
             #Not an int, so maybe a name. Look up Biosample record
-            b = cls.find_by({"name": val})
+            b = model.find_by({"name": name})
             return b["id"]
     
 
@@ -268,10 +268,10 @@ class Model(metaclass=Meta):
             if type(val) != str:
                 continue
             val = val.lower()
-            if val == "true":
+            if val in ["yes", "true"]:
                 val = True
                 dico[key] = val 
-            elif val == "false":
+            elif val == ["no",  "false"]:
                 val = False
                 dico[key] = val 
         return payload
@@ -391,6 +391,35 @@ class Model(metaclass=Meta):
         self.attrs = res.json()
 
     @classmethod
+    def set_id_in_fkeys(cls, payload)
+        """
+        Looks for any keys in the payload that end with either _id or _ids, signaling a foreign
+        key field. For each foreign key field, checks whether the value is using the name of the 
+        record or the acutal primary ID of the record. If the former case, the name is replace with
+        the record's primary ID. 
+
+        Args:
+            payload: `dict`. The payload to POST or PATCH.
+
+        Returns:
+            `dict`. The payload. 
+        """
+    
+        for key in payload:
+            val = payload[key]
+            if key.endswith("_id"):
+                model = cls.fkey_map[key]
+                rec_id = cls.replace_name_with_id(model=model, name=val)
+                payload[key] = rec_id
+            elif key.endswith("_ids"):
+                model = cls.fkey_map[key]
+                rec_ids = []
+                for v in val:
+                   rec_id = cls.replace_name_with_id(model=model, name=v)
+                   rec_ids.append(rec_id)
+                payload[key] = rec_ids
+
+    @classmethod
     def post(cls, payload):
         """Posts the data to the specified record.
 
@@ -403,16 +432,9 @@ class Model(metaclass=Meta):
         Raises:
             `Requests.exceptions.HTTPError`: The status code is not ok.
         """
-        for key in payload:
-            if key.endswith("_id"):
-                payload[key] = cls.replace_name_with_id(payload[key])
-            elif key.endswith("_ids"):
-                new_val = []
-                for i in payload[key]:
-                    new_val.append(cls.replace_name_with_id(i))
-                payload[key] = new_val
+        payload = cls.set_id_in_fkeys(payload)
         payload = cls.add_model_name_to_payload(payload)
-        payload = self.check_boolean_fields(payload)
+        payload = cls.check_boolean_fields(payload)
         cls.debug_logger.debug("POSTING payload {}".format(json.dumps(payload, indent=4)))
         res = requests.post(url=cls.URL, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
@@ -497,6 +519,11 @@ class CrisprConstruct(Model):
 class CrisprModification(Model):
     MODEL_NAME = "crispr_modification"
     MODEL_ABBR = "CRISPR"
+    fkey_map["biosample_id"] = Biosample
+    fkey_map["crispr_construct_ids"] = CrisprConstruct
+    fkey_map["donor_construct_id"] = DonorConstruct]
+    fkey_map["from_prototype_id"] = CrisprModification
+    fkey_map["part_of_id"] = CrisprModification
 
     def clone(self, biosample_id):
        url = self.record_url +  "/clone"
