@@ -15,6 +15,7 @@ the Pulsar API.
 """
 
 import base64
+from importlib import import_module
 import inflection
 import json
 import logging
@@ -23,6 +24,8 @@ import requests
 import pdb
 
 import pulsarpy as p
+
+THIS_MODULE = import_module(__name__)
 
 # Curl Examples
 #
@@ -222,7 +225,7 @@ class Model(metaclass=Meta):
         cls.post_logger.info(msg)
 
     @classmethod
-    def replace_name_with_id(model, name):
+    def replace_name_with_id(cls, model, name):
         """
         Used to replace a foreign key reference using a name with an ID.
         """
@@ -391,11 +394,11 @@ class Model(metaclass=Meta):
         self.attrs = res.json()
 
     @classmethod
-    def set_id_in_fkeys(cls, payload)
+    def set_id_in_fkeys(cls, payload):
         """
         Looks for any keys in the payload that end with either _id or _ids, signaling a foreign
         key field. For each foreign key field, checks whether the value is using the name of the 
-        record or the acutal primary ID of the record. If the former case, the name is replace with
+        record or the acutal primary ID of the record. If the former case, the name is replaced with
         the record's primary ID. 
 
         Args:
@@ -407,17 +410,20 @@ class Model(metaclass=Meta):
     
         for key in payload:
             val = payload[key]
+            if not val:
+               continue
             if key.endswith("_id"):
-                model = cls.fkey_map[key]
+                model = getattr(THIS_MODULE, cls.fkey_map[key])
                 rec_id = cls.replace_name_with_id(model=model, name=val)
                 payload[key] = rec_id
             elif key.endswith("_ids"):
-                model = cls.fkey_map[key]
+                model = getattr(THIS_MODULE, cls.fkey_map[key])
                 rec_ids = []
                 for v in val:
                    rec_id = cls.replace_name_with_id(model=model, name=v)
                    rec_ids.append(rec_id)
                 payload[key] = rec_ids
+        return payload
 
     @classmethod
     def post(cls, payload):
@@ -519,11 +525,12 @@ class CrisprConstruct(Model):
 class CrisprModification(Model):
     MODEL_NAME = "crispr_modification"
     MODEL_ABBR = "CRISPR"
-    fkey_map["biosample_id"] = Biosample
-    fkey_map["crispr_construct_ids"] = CrisprConstruct
-    fkey_map["donor_construct_id"] = DonorConstruct]
-    fkey_map["from_prototype_id"] = CrisprModification
-    fkey_map["part_of_id"] = CrisprModification
+    fkey_map = {}
+    fkey_map["biosample_id"] = "Biosample"
+    fkey_map["crispr_construct_ids"] = "CrisprConstruct"
+    fkey_map["donor_construct_id"] = "DonorConstruct"
+    fkey_map["from_prototype_id"] = "CrisprModification"
+    fkey_map["part_of_id"] = "CrisprModification"
 
     def clone(self, biosample_id):
        url = self.record_url +  "/clone"
