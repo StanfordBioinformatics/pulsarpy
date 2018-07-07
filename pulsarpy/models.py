@@ -183,7 +183,9 @@ class Model(metaclass=Meta):
         # self.attrs will store the actual record's attributes. Initialize value now to empty dict
         # since it is expected to be set already in self.__setattr__().
         self.__dict__["attrs"] = {}
-        self.rec_id = str(rec_id).split("-")[-1]
+        # rec_id could be the record's name. Check for that scenario, and convert to record ID if
+        # necessary.
+        self.rec_id = str(Model.replace_name_with_id(self.__class__, rec_id))
         self.record_url = os.path.join(self.URL, self.rec_id)
         self.__dict__["attrs"] = self._get() #avoid call to self.__setitem__() for this attr.
         self.log_error("Connecting to {}".format(p.URL))
@@ -533,6 +535,7 @@ class CrisprModification(Model):
     fkey_map["part_of_id"] = "CrisprModification"
 
     def clone(self, biosample_id):
+       biosample_id = Model.replace_name_with_id(model=Biosample, name=biosample_id)
        url = self.record_url +  "/clone"
        print("Cloning with URL {}".format(url))
        payload = {"biosample_id": biosample_id}
