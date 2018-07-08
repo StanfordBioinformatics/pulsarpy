@@ -499,6 +499,10 @@ class BiosampleOntology(Model):
 class BiosampleReplicate(Model):
     MODEL_NAME = "biosample_replicate"
     MODEL_ABBR = "BR"
+    fkey_map = {}
+    fkey_map["biosample_id"] = "Biosample"
+    fkey_map["chipseq_experiment_id"] = "ChipseqExperiment"
+    fkey_map["document_ids"] = "Document"
 
 class BiosampleTermName(Model):
     MODEL_NAME = "biosample_term_name"
@@ -511,6 +515,12 @@ class BiosampleType(Model):
 class ChipseqExperiment(Model):
     MODEL_NAME = "chipseq_experiment"
     MODEL_ABBR = "CS"
+    fkey_map = {}
+    fkey_map["document_ids"] = "Document"
+    fkey_map["control_biosample_replicate_ids"] = "BiosampleReplicate"
+    fkey_map["experiment_biosample_replicate_ids"] = "BiosampleReplicate"
+    fkey_map["target_id"] = "Target"
+    fkey_map["wild_type_input_id"] = "BiosampleReplicate"
 
 class ConcentrationUnit(Model):
     MODEL_NAME = "concentration_unit"
@@ -533,6 +543,7 @@ class CrisprModification(Model):
     fkey_map["donor_construct_id"] = "DonorConstruct"
     fkey_map["from_prototype_id"] = "CrisprModification"
     fkey_map["part_of_id"] = "CrisprModification"
+    fkey_map["target_id"] = "Target"
 
     def clone(self, biosample_id):
        biosample_id = Model.replace_name_with_id(model=Biosample, name=biosample_id)
