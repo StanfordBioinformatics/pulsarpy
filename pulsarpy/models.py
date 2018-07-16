@@ -577,6 +577,27 @@ class Document(Model):
         data = base64.b64decode(res.json()["data"])
         return data
 
+class Library(Model):
+    MODEL_NAME = "library"
+    MODEL_ABBR = "L"
+    fkey_map = {}
+    # belongs_to/ has_one
+    fkey_map["barcode_id"] = "Barcode"
+    fkey_map["biosample_id"] = "Biosample"
+    fkey_map["concentration_unit_id"] = "ConcentrationUnit"
+    fkey_map["from_prototype_id"] = "Library"
+    fkey_map["library_fragmentation_method_id"] = "LibraryFragmentationMethod"
+    fkey_map["nucleic_acid_term_id"] = "NucleicAcidTerm"
+    fkey_map["paired_barcode_id"] = "PairedBarcode"
+    fkey_map["sequencing_library_prep_kit_id"] = "SequencingLibraryPrepKit"
+    fkey_map["single_cell_sorting_id"] = "SingleCellSorting"
+    fkey_map["vendor_id"] = "Vendor"
+    fkey_map["well_id"] = "Well"
+    # has_many
+    fkey_map["document_ids"] = "Document"
+    
+
+
 class Target(Model):
     MODEL_NAME = "target"
     MODEL_ABBR = "TRG"
