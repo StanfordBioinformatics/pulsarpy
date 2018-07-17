@@ -35,6 +35,7 @@ REP_TAB = "replicates.txt"
 # technical_replicate_number
 # antibody_id
 # #antibody_accession
+# submitter_comments
 # notes
 BIO_TAB = "biosamples.txt"
 # name
@@ -48,10 +49,32 @@ BIO_TAB = "biosamples.txt"
 # biosample_term_name_id
 # vendor_id
 # vendor_product_identifier
+# lot_identifier
 # donor_id
 # passage_number
 # date_biosample_taken
+# submitter_comments
 # notes
+LIB_TAB = "libraries.txt"
+# name
+# upstream_identifier
+# biosample_id
+# nucleic_acid_term_id
+# strand_specific
+# document_ids
+# size_range
+# treatments
+# vendor_id
+# vendor_product_identifir
+# lot_identifier
+# library_fragmentation_method_id
+# sequencing_library_prep_kit_id
+# paired_end
+# barcode_id
+# paired_barcode_id
+# submitter_comments
+# notes
+GM_TAB = "gms.txt"
 
 
 def portal_ids_to_aliases(ids):
@@ -113,6 +136,8 @@ def main():
     rep_file = os.path.join(outdir, REP_TAB)
     repfh = open(rep_file, "a")
     reps = exp["replicates"]
+    gm_file = os.path.join(outdir, GM_TAB)
+    gmfh = open(gm_file, "a")
     for i in reps:
         repfh.write("\t") # empty for name field in Pulsar
         repfh.write(i["aliases"][0]
@@ -126,12 +151,14 @@ def main():
         repfh.write(i["technical_replicate_number"]
         repfh.write("\t") # empty for antibody_id fkey field in Pulsar
         repfh.write(i["antibody"]["accession"] + "\t")
+        repfh.write(i.get("submitter_comment") + "\t")
         repfh.write("\t") # empty for notes field in Pulsar
         # START BIOSAMPLE FILE
         bio_file = os.path.join(outdir, BIO_TAB)
         biofh = open(bio_file, "a")
         biofh.write("\t") # empty for name field in Pulsar
-        biofh.write(bio["aliases"][0] + "\t")
+        biosample_upstream_id = bio["aliases"][0]
+        biofh.write(biosample_upstream_id + "\t")
         biofh.write(bio.get("part_of") + "\t")
         biofh.write(bio.get("nih_institutional_certification") + "\t")
         biofh.write(bio.get("pooled_from") + "\t")
@@ -143,10 +170,71 @@ def main():
         biofh.write(bio["biosample_term_name"] + "\t")
         biofh.write(bio["source"]["name"] + "\t")
         biofh.write(bio.get("product_id") + "\t")
+        biofh.write(bio.get("lot_id") + "\t")
         biofh.write(bio["donor"]["aliases"][0] + "\t")
         biofh.write(bio.get("passage_number") + "\t")
         date_taken = bio.get("culture_start_date")
         if not date_taken:
             date_taken = bio.get("date_obtained")
         biofh.write(date_taken + "\t")
+        biofh.write(bio.get("submitter_comment") + "\t")
         biofh.write("\t") # empty for notes field in Pulsar
+        # update gm file
+        for gm_id in bio.get("genetic_modifications", []):
+            gm = conn.get(gm_id)
+            gmfh.write("\t") # empty for name field in Pulsar
+            gmfh.write(gm["aliases"][0]) + "\t")
+            gmfh.write(biosample_upstream_id + "\t")
+            gmfh.write(gm.get("description")
+            document_aliases = portal_ids_to_aliases(gm["documents"])
+            gmfh.write(",".join(document_aliases) + "\t")
+            gmfh.write(gm.get("category" + "\t")
+            gmfh.write(gm.get("purpose" + "\t")
+            gmfh.write(gm.get("method" + "\t")
+            gmfh.write(gm.get("guide_rna_sequences") + "\t")
+            gmfh.write(gm.get("introduced_tags") + "\t")
+            gmfh.write(gm.get("reagents") + "\t")
+            gmfh.write(gm.get("characterizations") + "\t")
+            gmfh.write("\t") # empty for crispr_construct_ids in Pulsar
+            gmfh.write("\t") # empty for donor_construct_id in Pulsar
+            gmfh.write("\t") # empty for notes field in pulsar
+        # START LIBRARY FILE
+        lib_file = os.path.join(outdir, LIB_TAB)
+        libfh = open(lib_file, "a")
+        libfh.write("\t") # empty for name field in Pulsar
+        libfh.write(biosample_upstream_id + "\t")
+        libfh.write(lib["nucleic_acid_term_name"] + "\t")
+        libfh.write(lib.get("strand_specificity") + "\t")
+        document_aliases = portal_ids_to_aliases(lib["documents"])
+        libfh.write(",".join(document_aliases) + "\t")
+        libfh.write(lib.get("size_range") + "\t")
+        treatment_aliases = portal_ids_to_aliases(lib["treatments"])
+        libfh.write(",".join(treatments_aliases) + "\t")
+        libfh.write(lib.get("source") + "\t")
+        libfh.write(lib.get("product_id") + "\t")
+        libfh.write(lib.get("lot_id") + "\t")
+        libfh.write(lib.get("fragmentation_method") + "\t")
+        libfh.write("\t") # empty for sequencing_library_prep_kit_id field in Pulsar
+        libfh.write("\t") # empty for paired_end field in Pulsar
+        libfh.write("\t") # empty for barcode_id in Pulsar
+        libfh.write("\t") # empty for paired_barcode_id in Pulsar
+  
+        libfh.write(lib.get("submitter_comment") + "\t")
+        libfh.write("\t") # empty for notes field in pulsar
+
+# name
+# upstream_identifier
+# biosample_id 
+# description
+# document_ids
+# category
+# purpose
+# #method
+# #guide_rna_sequences
+# #introduced_tags
+# #reagents
+# #characterizations
+# crispr_construct_ids
+# donor_construct_id
+# notes
+
