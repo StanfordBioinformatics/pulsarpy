@@ -106,6 +106,9 @@ GM_HEADER = [
 
 CONN = "" # connection object to ENCODE Portal
 
+def file_is_empty(name):
+    return not os.stat(name).st_size
+
 def portal_ids_to_aliases(ids):
     """
     Given a list of identifiers from the Portal, gets the first alias of each record specified by
@@ -140,9 +143,7 @@ def main():
     args = parser.parse_args()
     exp_id = args.exp
     outdir = args.outdir
-    write_headers = False
     if not os.path.exists(outdir):
-        write_headers = True
         os.mkdir(outdir)
     dcc_mode = args.dcc_mode
 
@@ -152,11 +153,35 @@ def main():
         # Default dcc_mode taken from environment variable DCC_MODE.
         CONN = euc.Connection()
 
+    exp = CONN.get(exp_id)
+
+    # Open output file handles
+    # experiments file
     exp_file = os.path.join(outdir, EXP_TAB)
     expfh = open(exp_file, "a")
-    if write_headers:
+    if file_is_empty(exp_file):
         expfh.write("\t".join(EXP_HEADER) + "\n")
-    exp = CONN.get(exp_id)
+    # replicates file
+    rep_file = os.path.join(outdir, REP_TAB)
+    repfh = open(rep_file, "a")
+    if file_is_empty(rep_file):
+        repfh.write("\t".join(REP_HEADER) + "\n")
+    # genetic modifications file
+    gm_file = os.path.join(outdir, GM_TAB)
+    gmfh = open(gm_file, "a")
+    if file_is_empty(gm_file):
+        gmfh.write("\t".join(GM_HEADER) + "\n")
+    # biosamples file
+    bio_file = os.path.join(outdir, BIO_TAB)
+    biofh = open(bio_file, "a")
+    if file_is_empty(bio_file):
+        biofh.write("\t".join(BIO_HEADER) + "\n")
+    # libraries file
+    lib_file = os.path.join(outdir, LIB_TAB)
+    libfh = open(lib_file, "a")
+    if file_is_empty(lib_file):
+        libfh.write("\t".join(LIB_HEADER) + "\n")
+
     expfh.write("\t") # emtpy for name field in Pulsar
     exp_alias = exp["aliases"][0]
     expfh.write(exp_alias + "\t")
@@ -169,15 +194,7 @@ def main():
     expfh.write("\t") # empty for notes field in Pulsar
     expfh.write("\n")
     # START REPLICATE FILE
-    rep_file = os.path.join(outdir, REP_TAB)
-    repfh = open(rep_file, "a")
-    if write_headers:
-        repfh.write("\t".join(REP_HEADER) + "\n")
     reps = exp["replicates"]
-    gm_file = os.path.join(outdir, GM_TAB)
-    gmfh = open(gm_file, "a")
-    if write_headers:
-        gmfh.write("\t".join(GM_HEADER) + "\n")
     for i in reps:
         repfh.write("\t") # empty for name field in Pulsar
         repfh.write(i["aliases"][0] + "\t")
@@ -195,10 +212,6 @@ def main():
         repfh.write("\t") # empty for notes field in Pulsar
         repfh.write("\n")
         # START BIOSAMPLE FILE
-        bio_file = os.path.join(outdir, BIO_TAB)
-        biofh = open(bio_file, "a")
-        if write_headers:
-            biofh.write("\t".join(BIO_HEADER) + "\n")
         biofh.write("\t") # empty for name field in Pulsar
         biosample_upstream_id = bio["aliases"][0]
         biofh.write(biosample_upstream_id + "\t")
@@ -239,7 +252,6 @@ def main():
             guide_seqs = gm.get("guide_rna_sequences", [])
             gmfh.write(",".join(guide_seqs) + "\t")
             tags = gm.get("introduced_tags", [])
-            tags = str(tags)
             gmfh.write(",".join(tags) + "\t")
             reagents = gm.get("reagents")
             gmfh.write(str(reagents) + "\t")
@@ -250,11 +262,8 @@ def main():
             gmfh.write("\t") # empty for notes field in pulsar
             gmfh.write("\n")
         # START LIBRARY FILE
-        lib_file = os.path.join(outdir, LIB_TAB)
-        libfh = open(lib_file, "a")
-        if write_headers:
-            libfh.write("\t".join(LIB_HEADER) + "\n")
         libfh.write("\t") # empty for name field in Pulsar
+        libfh.write(lib["aliases"][0] + "\t")
         libfh.write(biosample_upstream_id + "\t")
         libfh.write(lib["nucleic_acid_term_name"] + "\t")
         strand_specific = str(lib.get("strand_specificity", False))
