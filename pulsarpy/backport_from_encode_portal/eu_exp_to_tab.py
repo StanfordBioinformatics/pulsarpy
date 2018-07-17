@@ -119,7 +119,7 @@ def portal_ids_to_aliases(ids):
     res = []
     for i in ids:
         rec = CONN.get(i)
-        aliases = rec["aliases"]
+        aliases = rec.get("aliases", [])
         if not aliases:
             res.append(i)
         else:
@@ -219,9 +219,11 @@ def main():
         biofh.write(bio.get("nih_institutional_certification", "") + "\t")
         pooled_from = bio.get("pooled_from", [])
         biofh.write(",".join(pooled_from) + "\t")
-        treatment_aliases = portal_ids_to_aliases(bio["treatments"])
+        treatment_dicts = bio.get("treatments", {})
+        treatment_uuids = [x["uuid"] for x in treatment_dicts]
+        treatment_aliases = portal_ids_to_aliases(treatment_uuids)
         biofh.write(",".join(treatment_aliases) + "\t")
-        document_aliases = portal_ids_to_aliases(bio["documents"])
+        document_aliases = portal_ids_to_aliases(bio.get("documents", []))
         biofh.write(",".join(document_aliases) + "\t")
         biofh.write(bio["biosample_type"] + "\t")
         biofh.write(bio["biosample_term_name"] + "\t")
@@ -252,7 +254,7 @@ def main():
             guide_seqs = gm.get("guide_rna_sequences", [])
             gmfh.write(",".join(guide_seqs) + "\t")
             tags = gm.get("introduced_tags", [])
-            gmfh.write(",".join(tags) + "\t")
+            gmfh.write(str(tags) + "\t")
             reagents = gm.get("reagents")
             gmfh.write(str(reagents) + "\t")
             chars = gm.get("characterizations", [])
