@@ -264,7 +264,11 @@ def main():
         repfh.write(str(i["biological_replicate_number"]) + "\t")
         repfh.write(str(i["technical_replicate_number"]) + "\t")
         repfh.write("\t") # empty for antibody_id fkey field in Pulsar
-        repfh.write(i["antibody"]["accession"] + "\t")
+        antibody = i.get("antibody", "")
+        if antibody:
+            repfh.write(antibody["accession"] + "\t")
+        else:
+            repfh.write("\t")
         repfh.write(i.get("submitter_comment", "") + "\t")
         repfh.write("\t") # empty for notes field in Pulsar
         repfh.write("\n")
