@@ -21,12 +21,33 @@ if v < (3, 3):
 EXP_TAB = "experiments.txt"
 EXP_HEADER = [
   "name",
+  "#accession",
   "upstream_identifier",
   "description",
   "#target_name",
   "document_ids",
   "submitter_comments",
   "notes",
+]
+
+FILE_TAB = "files.txt"
+FILE_HEADER = [
+  "name",
+  "#accession",
+  "#alias",
+  "#platform",
+  "#submitted_file_name",
+  "#rep_uid",
+  "#rep_accession",
+  "#run_type",
+  "#controlled_by",
+  "#paired_with",
+  "#paired_end",
+  "#read_count",
+  "#read_length",
+  "#barcode",
+  "#machine",
+  "#lane",
 ]
 
 REP_TAB = "replicates.txt"
@@ -46,6 +67,7 @@ REP_HEADER = [
 BIO_TAB = "biosamples.txt"
 BIO_HEADER = [
   "name",
+  "#accession",
   "upstream_identifier",
   "part_of_id",
   "nih_institutional_certification",
@@ -67,6 +89,7 @@ BIO_HEADER = [
 LIB_TAB = "libraries.txt"
 LIB_HEADER = [
   "name",
+  "#accession",
   "upstream_identifier",
   "biosample_id",
   "nucleic_acid_term_id",
@@ -88,6 +111,7 @@ LIB_HEADER = [
 GM_TAB = "gms.txt"
 GM_HEADER = [
   "name",
+  "accession",
   "upstream_identifier",
   "biosample_id ",
   "description",
@@ -161,6 +185,11 @@ def main():
     expfh = open(exp_file, "a")
     if file_is_empty(exp_file):
         expfh.write("\t".join(EXP_HEADER) + "\n")
+    # files file
+    file_file = os.path.join(outdir, FILE_TAB)
+    ffh = open(file_file, "a")
+    if file_is_empty(file_file):
+        ffh.write("\t".join(FILE_HEADER) + "\n")
     # replicates file
     rep_file = os.path.join(outdir, REP_TAB)
     repfh = open(rep_file, "a")
@@ -183,6 +212,7 @@ def main():
         libfh.write("\t".join(LIB_HEADER) + "\n")
 
     expfh.write("\t") # emtpy for name field in Pulsar
+    expfh.write(exp["accession"] + "\t")
     exp_alias = exp["aliases"][0]
     expfh.write(exp_alias + "\t")
     expfh.write(exp["description"] + "\t")
@@ -193,6 +223,33 @@ def main():
     expfh.write(submitter_comments + "\t")
     expfh.write("\t") # empty for notes field in Pulsar
     expfh.write("\n")
+    # START FILE FILE
+    fastq_files = CONN.get_fastqfiles_on_exp(exp_id)
+    for f in fastq_files:
+        ffh.write("\t") # empty for name field in Pulsar
+        ffh.write(f["accession"] + "\t")
+        ffh.write(f["aliases"][0] + "\t")
+        platform = f["platform"]["aliases"][-1]
+        ffh.write(platform + "\t")
+        ffh.write(f.get("submitted_file_name", "") + "\t")
+        rep = f["replicate"]
+        ffh.write(rep.get("uuid", "") + "\t")
+        ffh.write(rep["aliases"][0] + "\t")
+        ffh.write(f.get("run_type", "") + "\t")
+        controlled_by = f.get("controlled_by", [])
+        ffh.write(",".join(controlled_by) + "\t")
+        ffh.write(f.get("paired_with", "") + "\t")
+        ffh.write(f.get("paired_end", "") + "\t")
+        ffh.write(str(f.get("read_count", "")) + "\t")
+        ffh.write(str(f.get("read_length", "")) + "\t")
+        fc = f.get("flowcell_details", {})
+        if fc:
+            fc = fc[0]
+        ffh.write(fc.get("barcode", "") + "\t")
+        ffh.write(fc.get("machine", "") + "\t")
+        ffh.write(str(fc.get("lane", "")) + "\t")
+        ffh.write("\n")
+
     # START REPLICATE FILE
     reps = exp["replicates"]
     for i in reps:
@@ -213,6 +270,7 @@ def main():
         repfh.write("\n")
         # START BIOSAMPLE FILE
         biofh.write("\t") # empty for name field in Pulsar
+        biofh.write(bio["accession"] + "\t") 
         biosample_upstream_id = bio["aliases"][0]
         biofh.write(biosample_upstream_id + "\t")
         biofh.write(bio.get("part_of", "") + "\t")
@@ -243,6 +301,7 @@ def main():
         for gm_id in bio.get("genetic_modifications", []):
             gm = CONN.get(gm_id)
             gmfh.write("\t") # empty for name field in Pulsar
+            gmfh.write(gm["accession"] + "\t")
             gmfh.write(gm["aliases"][0] + "\t")
             gmfh.write(biosample_upstream_id + "\t")
             gmfh.write(gm.get("description", "") + "\t")
@@ -265,6 +324,7 @@ def main():
             gmfh.write("\n")
         # START LIBRARY FILE
         libfh.write("\t") # empty for name field in Pulsar
+        libfh.write(lib["accession"] + "\t")
         libfh.write(lib["aliases"][0] + "\t")
         libfh.write(biosample_upstream_id + "\t")
         libfh.write(lib["nucleic_acid_term_name"] + "\t")
@@ -289,6 +349,7 @@ def main():
         libfh.write("\n")
 
     expfh.close()
+    ffh.close()
     repfh.close()
     biofh.close()
     libfh.close()
