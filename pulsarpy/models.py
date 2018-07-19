@@ -179,6 +179,7 @@ class Model(metaclass=Meta):
         Args:
             uid: The database identifier of the record to fetch, which can be specified either as the
                 primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
+                rec_id could also be the record's name, and if so will be converted to the record ID.
         """
         # self.attrs will store the actual record's attributes. Initialize value now to empty dict
         # since it is expected to be set already in self.__setattr__().
@@ -387,9 +388,11 @@ class Model(metaclass=Meta):
             for key in payload:
                 val = payload[key]
                 if type(val) == list:
-                    payload[val] = list(set([getattr(self, key), val]))
+                    val.extend(getattr(self, key))
+                    payload[key] = list(set(val))
         payload = self.__class__.add_model_name_to_payload(payload)
         payload = self.check_boolean_fields(payload)
+        self.debug_logger.debug("PATCHING payload {}".format(json.dumps(payload, indent=4)))
         res = requests.patch(url=self.record_url, data=json.dumps(payload), headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
