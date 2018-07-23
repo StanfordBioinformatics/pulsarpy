@@ -379,7 +379,7 @@ class Model(metaclass=Meta):
             payload - hash. This will be JSON-formatted prior to sending the request.
 
         Returns:
-            `NoneType`: None.
+            `dict`. The JSON formatted response. 
 
         Raises:
             `requests.exceptions.HTTPError`: The status code is not ok.
@@ -396,7 +396,9 @@ class Model(metaclass=Meta):
         res = requests.patch(url=self.record_url, data=json.dumps(payload), headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
-        self.attrs = res.json()
+        json_res = res.json()
+        self.attrs = json_res
+        return json_res
 
     @classmethod
     def set_id_in_fkeys(cls, payload):
@@ -543,6 +545,7 @@ class CrisprModification(Model):
     fkey_map = {}
     fkey_map["biosample_id"] = "Biosample"
     fkey_map["crispr_construct_ids"] = "CrisprConstruct"
+    fkey_map["document_ids"] = "Document"
     fkey_map["donor_construct_id"] = "DonorConstruct"
     fkey_map["from_prototype_id"] = "CrisprModification"
     fkey_map["part_of_id"] = "CrisprModification"

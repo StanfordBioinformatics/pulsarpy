@@ -8,7 +8,8 @@
 ###
 
 """
-Given a tab-delimited sheet, imports records of the specified Model into Pulsar LIMS. Array values
+Given a tab-delimited sheet, creates new records of the specified Model into Pulsar LIMS or updates
+existing records if the patch option is provided. Array values
 should be comma-delimted as this program will split on the comma and add array literals. Array
 fields are only assumed when the field name has an 'ids' suffix. 
 """
@@ -17,6 +18,7 @@ import argparse
 import pulsarpy.models as models
 import pulsarpy.utils
 
+RECORD_ID_FIELD = "record_id"
 
 def get_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
@@ -27,6 +29,11 @@ def get_parser():
       as the first row, and field names must match record attribute names. Any field names that start
       with a '#' will be skipped. Any rows that start with a '#' will also be skipped (apart from the
       header line).""")
+    parser.add_argument("-p", "--patch", action="store_true", help="""
+      Presence of this option means to PATCH instead of POST. The input file must contain a column
+      by the name of {} to designate the existing record to PATCH.  You can use a record's primary
+      ID or name as the identifier.""".format(RECORD_ID_FIELD))
+ 
     return parser
 
 
@@ -35,8 +42,15 @@ def main():
     args = parser.parse_args()
     infile = args.infile
     model = getattr(models, args.model)
+    patch = args.patch
     fh = open(infile)
     header = fh.readline().strip("\n").split("\t")
+    if patch:
+        if RECORD_ID_FIELD not in header:
+            raise Exception("When in PATCH mode, the input file must provide the {} column.".format(RECORD_ID_FIELD))
+    else:
+        if RECORD_ID_FIELD in header:
+            header.remove(RECORD_ID_FIELD) # No use for it in POST mode.
     field_positions = [header.index(x) for x in header if not x.startswith("#") and x.strip()]
     line_cnt = 1 # Already read header line
     for line in fh:
@@ -55,7 +69,13 @@ def main():
                 val = [x.strip() for x in val.split(",")]
             payload[header[pos]] = val
         print("Submitting line {}".format(line_cnt))
-        res = model.post(payload)
+        if patch:
+            rec_id = payload[RECORD_ID_FIELD]
+            payload.pop(RECORD_ID_FIELD)
+            rec = model(rec_id)
+            res = rec.patch(payload)
+        else:
+            res = model.post(payload)
         print("Success: ID {}".format(res["id"]))
 
 if __name__ == "__main__":
