@@ -61,7 +61,8 @@ def main():
         line = line.strip("\n").split("\t")
         for pos in field_positions:
             val = line[pos].strip()
-            if not val:
+            if not val and not patch:
+               # Skip empty fields when POSTING, but not when PATCHING.
                continue
             field_name = header[pos]
             if field_name.endswith("ids"):
