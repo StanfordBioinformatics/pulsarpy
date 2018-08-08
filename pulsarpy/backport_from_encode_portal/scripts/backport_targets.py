@@ -5,6 +5,7 @@ Imports the biosamples from the experiments given by an ENCODE Portal search URL
 """
 
 import pdb
+import json
 import time
 import argparse
 
@@ -15,15 +16,22 @@ SPECIES = "Homo sapiens"
 
 def get_parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("-u", "--url", required=True, help="The search URL.")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("-i", "--infile", help="JSON formatted file containing the records.")
+    group.add_argument("-u", "--url", help="The search URL.")
     return parser
 
 def main():
     parser = get_parser()
     args = parser.parse_args()
     url = args.url
-    conn = euc.Connection("prod")
-    results = conn.search(url=url)
+    infile = args.infile
+    if url:
+        conn = euc.Connection("prod")
+        results = conn.search(url=url)
+    else:
+        fh = open(infile)
+        results = json.load(fh)
     admin = models.User.find_by({"first_name": "Admin"})
     if not admin:
         raise Exception("Could not find the Admin user in the database, which is needed for associating with new records.")
@@ -50,7 +58,8 @@ def main():
         payload["user_id"] = admin["id"]
         xrefs = rec["dbxref"]
         for ref in xrefs:
-            prefix, ref = ref.split(":")
+            tokens = ref.split(":")
+            prefix, ref = ref.rsplit(":", 1)
             if prefix == "ENSEMBL":
                 payload["ensembl"] = ref
             elif prefix == "UniProtKB":
