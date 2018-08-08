@@ -508,6 +508,7 @@ class BiosampleReplicate(Model):
     fkey_map["biosample_id"] = "Biosample"
     fkey_map["chipseq_experiment_id"] = "ChipseqExperiment"
     fkey_map["document_ids"] = "Document"
+    fkey_map["user_id"] = "User"
 
 class BiosampleTermName(Model):
     MODEL_NAME = "biosample_term_name"
@@ -525,11 +526,12 @@ class ChipseqExperiment(Model):
     fkey_map["control_biosample_replicate_ids"] = "BiosampleReplicate"
     fkey_map["experiment_biosample_replicate_ids"] = "BiosampleReplicate"
     fkey_map["target_id"] = "Target"
+    fkey_map["user_id"] = "User"
     fkey_map["wild_type_input_id"] = "BiosampleReplicate"
 
-class ConcentrationUnit(Model):
-    MODEL_NAME = "concentration_unit"
-    MODEL_ABBR = "CU"
+class Unit(Model):
+    MODEL_NAME = "Unit"
+    MODEL_ABBR = "UN"
 
 class ConstructTag(Model):
     MODEL_NAME = "construct_tag"
@@ -550,6 +552,7 @@ class CrisprModification(Model):
     fkey_map["from_prototype_id"] = "CrisprModification"
     fkey_map["part_of_id"] = "CrisprModification"
     fkey_map["target_id"] = "Target"
+    fkey_map["user_id"] = "User"
 
     def clone(self, biosample_id):
        biosample_id = Model.replace_name_with_id(model=Biosample, name=biosample_id)
@@ -597,6 +600,7 @@ class Library(Model):
     fkey_map["paired_barcode_id"] = "PairedBarcode"
     fkey_map["sequencing_library_prep_kit_id"] = "SequencingLibraryPrepKit"
     fkey_map["single_cell_sorting_id"] = "SingleCellSorting"
+    fkey_map["user_id"] = "User"
     fkey_map["vendor_id"] = "Vendor"
     fkey_map["well_id"] = "Well"
     # has_many
@@ -607,6 +611,11 @@ class Library(Model):
 class Target(Model):
     MODEL_NAME = "target"
     MODEL_ABBR = "TRG"
+    fkey_map = {}
+    fkey_map["user_id"] = "User"
+    fkey_map["antibody_ids"] = "Antibody"
+    fkey_map["crispr_construct_ids"] = "CrisprConstruct"
+    fkey_map["donor_construct_ids"] = "DonorConstruct"
 
 class Treatment(Model):
     MODEL_NAME = "treatment"
