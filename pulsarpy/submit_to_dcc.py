@@ -69,9 +69,6 @@ class Submit():
         return name.replace("#","").replace("/","-")
                   
 
-For example, given "hi #1", "hi 1" will be
-        returned. 
-    
     def patch(self, pulsar_rec_id,  payload, raise_403=True, extend_array_values=False):
         """Updates a record in the ENCODE Portal based on its state in Pulsar. 
     
@@ -134,7 +131,9 @@ For example, given "hi #1", "hi 1" will be
             the 'uuid' property.
         """
         # Make sure the record's UPSTREAM_ATTR isn't set, which would mean that it was already POSTED
-        upstream = payload.pop(self.UPSTREAM_ATTR)
+        upstream = ""
+        if self.UPSTREAM_ATTR in payload:
+            upstream = payload.pop(self.UPSTREAM_ATTR)
         if upstream:
             print("Will not POST '{}' since it was already submitted as '{}'.".format(pulsar_rec_id, upstream))
             return upstream
@@ -159,9 +158,9 @@ For example, given "hi #1", "hi 1" will be
         return upstream
     
     def post_crispr_modification(self, rec_id, patch=False):
-        rec = models.CrisprModification.get(rec_id)
+        rec = models.CrisprModification(rec_id)
         aliases = []
-        aliases.append(models.CrisprModification.MODEL_ABBR + "-" + str(rec["id"]))
+        aliases.append(rec.abbrev_id())
         aliases.append(self.clean_name(rec["name"]))
         payload = {}
         payload["aliases"] = aliases
@@ -173,23 +172,25 @@ For example, given "hi #1", "hi 1" will be
         return rec[self.UPSTREAM_ATTR]
     
     def post_document(self, rec_id, patch=False):
-        rec = models.Document.get(rec_id)
+        rec = models.Document(rec_id)
         aliases = []
-        aliases.append(models.Document.MODEL_ABBR + "-" + str(rec["id"]))
-        aliases.append(self.clean_name(rec["name"]))
+        aliases.append(rec.abbrev_id())
+        name = rec.name
+        if name:
+            aliases.append(self.clean_name(name))
         payload = {}
         payload["aliases"] = aliases
-        payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
-        payload["description"] = rec["description"]
-        payload["document_type"] = rec["document_type"]["name"]
-        content_type = rec["content_type"]
+        payload[self.UPSTREAM_ATTR] = rec.get(self.UPSTREAM_ATTR])
+        payload["description"] = rec.description
+        payload["document_type"] = rec.document_type["name"]
+        content_type = rec.content_type
         # Create attachment for the attachment prop
         file_contents = models.Document.download(rec_id)
         data = base64.b64encode(file_contents)
         temp_uri = str(data, "utf-8")
         href = "data:{mime_type};base64,{temp_uri}".format(mime_type=content_type, temp_uri=temp_uri)
         attachment = {}
-        attachment["download"] = rec["name"]
+        attachment["download"] = rec.name
         attachment["type"] = content_type 
         attachment["href"] = href
         payload["attachment"] = attachment
@@ -200,33 +201,35 @@ For example, given "hi #1", "hi 1" will be
         return res
 
     def post_treatment(self, rec_id, patch=False):
-        rec = models.Treatment.get(rec_id)
+        rec = models.Treatment(rec_id)
         aliases = []
-        aliases.append(models.Treatment.MODEL_ABBR + "-" + str(rec["id"]))
-        aliases.append(self.clean_name(rec["name"]))
+        aliases.append(rec.abbrev_id())
+        name = rec.name
+        if name:
+            aliases.append(self.clean_name(name))
         payload = {}
         payload["aliases"] = aliases
-        payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
-        conc = rec.get("concentration")
+        payload[self.UPSTREAM_ATTR] = rec.get(self.UPSTREAM_ATTR)
+        conc = rec.concentration
         if conc:
             payload["amount"] = conc
-            payload["amount_units"] = rec["concentration_unit"]["name"]
-        duration = rec.get("duration") 
+            payload["amount_units"] = rec.concentration_unit["name"]
+        duration = rec.duration
         if duration:
             payload["duration"] = duration
-            payload["duration_units"] = rec["duration_units"]
-        temp = rec.get("temperature_celsius")
+            payload["duration_units"] = rec.duration_units
+        temp = rec.temperature_celsius
         if temp:
             payload["temperature"] = temp
             payload["temperature_units"] = "Celsius"
-        payload["treatment_term_id"] = rec["treatment_term_name"]["accession"]
-        payload["treatment_term_name"] = rec["treatment_term_name"]["name"]
-        payload["treatment_type"] = rec["treatment_type"]
+        payload["treatment_term_id"] = rec.treatment_term_name["accession"]
+        payload["treatment_term_name"] = rec.treatment_term_name["name"]
+        payload["treatment_type"] = rec.treatment_type
 
-        documents = rec["documents"]
+        documents = rec.documents
         doc_upstreams = []
         for doc in documents:
-            doc_upstream = doc[self.UPSTREAM_ATTR]
+            doc_upstream = doc.get(self.UPSTREAM_ATTR)
             if not doc_upstream:
                 doc_upstream = post_document(doc)
             doc_upstreams.append(doc_upstream)
@@ -246,102 +249,103 @@ For example, given "hi #1", "hi 1" will be
         raise Exception("Vendors must be registered directly by the DCC personel.")
 
     def post_biosample(self, rec_id, patch=False):
-        rec = models.Biosample.get(rec_id)
+        rec = models.Biosample(rec_id)
         # The alias lab prefixes will be set in the encode_utils package if the DCC_LAB environment
         # variable is set.
         aliases = []
-        aliases.append(models.Biosample.MODEL_ABBR + "-" + str(rec["id"]))
-        aliases.append(self.clean_name(rec["name"]))
-        tube_label = rec["tube_label"]
-        if tube_label:
-            aliases.append(tube_label)
+        aliases.append(rec.abbrev_id())
+        name = rec.name
+        if name: 
+          aliases.append(self.clean_name(name))
         payload = {}
         payload["aliases"] = aliases
-        payload[self.UPSTREAM_ATTR] = rec[self.UPSTREAM_ATTR]
-        payload["biosample_term_name"] = rec["biosample_term_name"]["name"].lower() #Portal requires lower-case.
-        payload["biosample_term_id"] = rec["biosample_term_name"]["accession"] biosample_type = rec["biosample_type"]["name"] 
-        payload["biosample_type"] = biosample_type
-        date_biosample_taken = rec["date_biosample_taken"]
+        btn_name = rec.biosample_term_name["name"].lower() # #Portal requires lower-case.
+        payload["biosample_term_name"] = btn_name
+        payload["biosample_term_id"] = rec.biosample_term_name["accession"]
+        payload["biosample_type"] = rec.biosample_type["name"]
+        date_biosample_taken = rec.date_biosample_taken
         if date_biosample_taken:
             if biosample_type == "tissue":
                 payload["date_obtained"] = date_biosample_taken
             else:
                 payload["culture_harvest_date"] = date_biosample_taken
-        payload["description"] = rec["description"]
-        lot_id = rec["lot_identifier"] 
+        desc = rec.description
+        if desc:
+            payload["description"] = desc
+        lot_id = rec.lot_identifier
         if lot_id:
             payload["lot_id"] = lot_id
-        nih_cert = rec["nih_institutional_certification"]
+        nih_cert = rec.nih_institutional_certification
         if nih_cert:
             payload["nih_institutional_certification"] = nih_cert
         payload["organism"] = "human"
-        passage_number = rec["passage_number"]
+        passage_number = rec.passage_number
         if passage_number:
             payload["passage_number"] = passage_number
-        starting_amount = rec["starting_amount"] 
+        starting_amount = rec.starting_amount
         if starting_amount:
             payload["starting_amount"] = starting_amount
-            payload["starting_amount_units"] = rec["starting_amount_units"]
-        submitter_comment = rec["submitter_comments"]
+            payload["starting_amount_units"] = rec.starting_amount_units["name"]
+        submitter_comment = rec.submitter_comments
         if submitter_comment:
             payload["submitter_comment"] = submitter_comment
-        preservation_method = rec["tissue_preservation_method"]
+        preservation_method = rec.tissue_preservation_method
         if preservation_method:
             payload["preservation_method"] = preservation_method
-        prod_id = rec["vendor_product_identifier"]
+        prod_id = rec.vendor_product_identifier
         if prod_id:
             payload["product_id"] = prod_id
     
-        crispr_modification = rec["crispr_modification"]
-        if crispr_modification:
-            crispr_mod_upstream = crispr_modification[self.UPSTREAM_ATTR]
-            if not crispr_mod_upstream:
-                crispr_mod_upstream = self.post_crispr_modification(crispr_modification["id"])
-            payload["genetic_modifications"] = crispr_mod_upstream
+        cm = rec.crispr_modification
+        if cm:
+            cm_upstream = cm.get(self.UPSTREAM_ATTR)
+            if not cm_upstream:
+                cm_upstream = self.post_crispr_modification(cm_id)
+            payload["genetic_modifications"] = cm_upstream
     
-        documents = rec["documents"]
-        doc_upstreams = []
-        for doc in documents:
-            doc_upstream = doc[self.UPSTREAM_ATTR]
-            if not doc_upstream:
-                doc_upstream = self.post_document(doc["id"])
-            doc_upstreams.append(doc_upstream)
-        payload["documents"] = doc_upstreams
+        documents = rec.documents
+        if documents:
+            doc_upstreams = []
+            for doc in documents:
+                doc_upstream = doc.get(self.UPSTREAM_ATTR)
+                if not doc_upstream:
+                    doc_upstream = self.post_document(doc.id)
+                doc_upstreams.append(doc_upstream)
+            payload["documents"] = doc_upstreams
     
-        donor_upstream = rec["donor"][self.UPSTREAM_ATTR]
+        donor_upstream = rec.donor.get(self.UPSTREAM_ATTR)
         if not donor_upstream:
             raise Exception("Donor '{}' of biosample '{}' does not have its upstream set. Donors must be registered with the DCC directly.".format(rec["donor"]["id"], rec_id))
         payload["donor"] = donor_upstream
     
     
-        part_of_biosample_id = rec["part_of_biosample_id"]
-        if part_of_biosample_id:
-            part_of_biosample = models.Biosample.get(part_of_biosample_id)
-            pob_upstream = part_of_biosample[self.UPSTREAM_ATTR]
+        part_of_biosample = rec.part_of
+        if part_of_biosample:
+            pob_upstream = part_of_biosample.get(self.UPSTREAM_ATTR)
             if not pob_upstream:
-                pob_upstream = self.post_biosample(part_of_biosample["id"])
+                pob_upstream = self.post_biosample(part_of_biosample.id)
             payload["part_of"] = pob_upstream
     
-        pooled_from_biosamples = rec["pooled_from_biosamples"]
+        pooled_from_biosamples = rec.pooled_from_biosamples
         if pooled_from_biosamples:
             payload["pooled_from"] = []
             for p in pooled_from_biosamples:
-                p_upstream = p[self.UPSTREAM_ATTR]
+                p_upstream = p.get(self.UPSTREAM_ATTR)
                 if not p_upstream:
-                    p_upstream = self.post_biosample(p["id"])
+                    p_upstream = self.post_biosample(p.id)
                 payload["pooled_from"].append(p_upstream)
     
-        vendor_upstream = rec["vendor"][self.UPSTREAM_ATTR]
+        vendor_upstream = rec.vendor.get(self.UPSTREAM_ATTR)
         if not vendor_upstream:
             raise Exception("Biosample '{}' has a vendor without an upstream set: Vendors are requied to be registered by the DCC personel, and Pulsar needs to have the Vendor record's '{}' attribute set.".format(rec_id, self.UPSTREAM_ATTR))
         payload["source"] = vendor_upstream
     
-        treatments = rec["treatments"]
+        treatments = rec.treatments
         treat_upstreams = []
         for treat in treatments:
-            treat_upstream = treat[self.PSTREAM_ATTR]
+            treat_upstream = treat.get(self.PSTREAM_ATTR)
             if not treat_upstream:
-                treat_upstream = self.post_treatment(treat["id"])
+                treat_upstream = self.post_treatment(treat.id)
             treat_upstreams.append(treat_upstream)
         payload["treatments"] = treat_upstreams
    
@@ -350,3 +354,41 @@ For example, given "hi #1", "hi 1" will be
         else:
             res = self.post(payload=payload, dcc_profile="biosample", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
         return res
+
+    def post_library(self, rec_id, patch=False):
+        rec = models.Library(rec_id)
+        aliases = []
+        aliases.append(rec.abbrev_id())
+        name = rec.name
+        if name: 
+          aliases.append(self.clean_name(name))
+        payload = {}
+        payload["aliases"] = aliases
+        payload[self.UPSTREAM_ATTR] = rec.get(self.UPSTREAM_ATTR)
+        payload["nucleic_acid_term_name"] = rec.nucleic_acid_term["name"]
+        biosample_upstream = rec.biosample.get(self.UPSTREAM_ATTR)
+        if not biosample_upstream:
+            biosample_upstream = self.post_biosample(rec_id=rec.biosample_id, patch=False)
+        payload["biosample"] = biosample_upstream
+        docs = rec.documents
+        doc_upstreams = []
+        for d in docs:
+            upstream = d.get(self.UPSTREAM_ATTR)
+            if not upstream:
+                upstream = self.post_document(rec_id=d["id"], patch=False)
+                doc_upstreams.append(upstream)
+        if doc_upstreams:
+            payload["documents"] = doc_upstreams
+        fragmentation_method = rec.library_fragmentation_method
+        if fragmentation_method:
+            payload["fragmentation_method"] = fragmentation_method["name"]
+        payload["lot_id"] = rec.lot_identifier
+        payload["product_id"] = rec.vendor_product_identifier
+        payload["size_range"] = rec.size_range
+        payload["strand_specificity"] = rec.strand_specific
+        payload["source"] = rec.vendor["id"]
+        
+       
+            
+       
+        

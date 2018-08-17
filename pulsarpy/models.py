@@ -282,6 +282,9 @@ class Model(metaclass=Meta):
                 dico[key] = val 
         return payload
 
+    def abbrev_id(self):
+        return self.MODEL_ABBR + "-" + str(self.id)
+
     def delete(self):
         """Deletes the record.
         """
@@ -607,6 +610,18 @@ class Library(Model):
     fkey_map["document_ids"] = "Document"
     
 
+class SingleCellSorting(Model):
+    MODEL_NAME = "single_cell_sorting"
+    MODEL_ABBR = "SCS"
+    fkey_map = {}
+    fkey_map["analysis_ids"] = "Analysis"
+    fkey_map["document_ids"] = "Document"
+    fkey_map["library_prototype_id"] = "Library"
+    fkey_map["plate_ids"] = "Plate"
+    fkey_map["sorting_biosample_id"] = "Biosample"
+    fkey_map["starting_biosample"] = "Biosample"
+    fkey_map["user_id"] = "User"
+    
 
 class Target(Model):
     MODEL_NAME = "target"
