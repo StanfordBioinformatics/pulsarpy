@@ -387,6 +387,17 @@ class Submit():
         payload["size_range"] = rec.size_range
         payload["strand_specificity"] = rec.strand_specific
         payload["source"] = rec.vendor["id"]
+
+    def post_single_cell_sorting(self, rec_id, patch=False)
+        rec = models.SingleCellSorting(rec_id)
+        aliases = []
+        aliases.append(rec.abbrev_id())
+        name = rec.name
+        if name: 
+          aliases.append(self.clean_name(name))
+        payload = {}
+        payload["aliases"] = aliases
+        sreqs = rec.sequencing_requests
         
        
             
