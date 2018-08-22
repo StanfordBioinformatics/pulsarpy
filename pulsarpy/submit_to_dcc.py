@@ -180,7 +180,7 @@ class Submit():
             aliases.append(self.clean_name(name))
         payload = {}
         payload["aliases"] = aliases
-        payload[self.UPSTREAM_ATTR] = rec.get(self.UPSTREAM_ATTR])
+        payload[self.UPSTREAM_ATTR] = rec.get(self.UPSTREAM_ATTR)
         payload["description"] = rec.description
         payload["document_type"] = rec.document_type["name"]
         content_type = rec.content_type
@@ -356,6 +356,10 @@ class Submit():
         return res
 
     def post_library(self, rec_id, patch=False):
+        """
+        This method will check whether the biosample associated to this library is submitted. If it
+        isn't, it will first submit the biosample. 
+        """
         rec = models.Library(rec_id)
         aliases = []
         aliases.append(rec.abbrev_id())
@@ -387,19 +391,66 @@ class Submit():
         payload["size_range"] = rec.size_range
         payload["strand_specificity"] = rec.strand_specific
         payload["source"] = rec.vendor["id"]
+        ssc = library.single_cell_sorting
+        if ssc:
+            barcode_details = {}
 
-    def post_single_cell_sorting(self, rec_id, patch=False)
+    def get_barcode_details_for_ssc(self, ssc_id):
+        """
+        This purpose of this method is to provide a value to the library.barcode_details property
+        of the Library profile on the ENCODE Portal. That property taks an array of objects whose
+        properties are the 'barcode', 'plate_id', and 'plate_location'. 
+
+        Args:
+            ssc_id: The Pulsar ID for a SingleCellSorting record.
+        """
+        ssc = models.SingleCellSorting(ssc_id)
+        paired_end = ssc.library_prototype["paired_end"]
+        plates = ssc.plates
+        results = []
+        for p in plates:
+            for well in p["wells"]:
+                details = {}
+                details["plate_id"] = p["name"]
+                details["plate_location"] = well["name"]
+                lib = well["biosample"]["libraries"][-1]
+                # Doesn't make sense to have more than one library for single cell experiments. 
+                if not paired_end:
+                    barcode = lib["barcode"]["sequence"]
+                else:
+                    pbc = lib["paired_barcode"]
+                    barcode = pbc["index1"]["sequence"] + "-" + pbc["index2"]["sequence"]
+                details["barcode"] = barcode
+                results.append(details)
+        return results
+
+    def post_single_cell_sorting(self, rec_id, patch=False):
         rec = models.SingleCellSorting(rec_id)
         aliases = []
         aliases.append(rec.abbrev_id())
         name = rec.name
         if name: 
           aliases.append(self.clean_name(name))
+        sorting_biosample = rec.sorting_biosample
         payload = {}
+        # Set the explicitly required properties first:
         payload["aliases"] = aliases
-        sreqs = rec.sequencing_requests
-        
-       
-            
-       
-        
+        payload["assay_term_name"] = "single-cell ATAC-seq"
+        payload["biosample_type"] = sorting_biosample["biosample_type"]["name"]
+        payload["experiment_classification"] = "functional genomics"
+        # And now the rest
+        payload["biosample_term_name"] = starting_biosample["biosample_term_name"]["name"]
+        payload["biosmple_term_id"] = starting_biosample["biosample_term_name"]["accession"]
+        payload["description"] = rec.description
+        docs = rec.documents
+        doc_upstreams = []
+        for d in docs:
+            upstream = self.post_document(rec_id=d)
+            doc_upstreams.append(upstream)
+        payload["documents"] = doc_upstreams
+
+        # Submit biosample
+        biosample_upstream = self.post_biosample(rec_id=sorting_biosample.id, patch=patch)
+        # Submit library
+        library_prototype = rec.library_prototype
+        library_upstream = self.post_library(rec_id=library_prototype.id, patch=patch)

@@ -496,6 +496,10 @@ class AntibodyPurification(Model):
     MODEL_NAME = "antibody_purification"
     MODEL_ABBR = "AP"
 
+class Barcode(Model):
+    MODEL_NAME = "barcode"
+    MODEL_ABBR = "BC"
+
 class Biosample(Model):
     MODEL_NAME = "biosample"
     MODEL_ABBR = "B"
@@ -608,6 +612,16 @@ class Library(Model):
     fkey_map["well_id"] = "Well"
     # has_many
     fkey_map["document_ids"] = "Document"
+
+
+class PairedBarcode(Model):
+    MODEL_NAME = "paired_barcode"
+    MODEL_ABBR = "PBC"
+    
+
+class Plate(Model):
+    MODEL_NAME = "plate"
+    MODEL_ABBR = "PL"
     
 
 class SingleCellSorting(Model):
