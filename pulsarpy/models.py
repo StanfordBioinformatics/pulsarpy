@@ -215,8 +215,6 @@ class Model(metaclass=Meta):
         res = requests.get(url=self.record_url, headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"get_bob.html")
         res.raise_for_status()
-        #pdb.set_trace()
-        #return res.json()
         return res.json()
 
     @classmethod
@@ -276,10 +274,10 @@ class Model(metaclass=Meta):
             val = val.lower()
             if val in ["yes", "true"]:
                 val = True
-                dico[key] = val 
+                payload[key] = val 
             elif val == ["no",  "false"]:
                 val = False
-                dico[key] = val 
+                payload[key] = val 
         return payload
 
     def abbrev_id(self):
@@ -393,8 +391,8 @@ class Model(metaclass=Meta):
                 if type(val) == list:
                     val.extend(getattr(self, key))
                     payload[key] = list(set(val))
-        payload = self.__class__.add_model_name_to_payload(payload)
         payload = self.check_boolean_fields(payload)
+        payload = self.__class__.add_model_name_to_payload(payload)
         self.debug_logger.debug("PATCHING payload {}".format(json.dumps(payload, indent=4)))
         res = requests.patch(url=self.record_url, data=json.dumps(payload), headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
@@ -408,7 +406,8 @@ class Model(metaclass=Meta):
         """
         Looks for any keys in the payload that end with either _id or _ids, signaling a foreign
         key field. For each foreign key field, checks whether the value is using the name of the 
-        record or the acutal primary ID of the record. If the former case, the name is replaced with
+        record or the acutal primary ID of the record (which may include the model abbreviation, i.e.
+        B-1). If the former case, the name is replaced with
         the record's primary ID. 
 
         Args:
@@ -424,6 +423,9 @@ class Model(metaclass=Meta):
                continue
             if key.endswith("_id"):
                 model = getattr(THIS_MODULE, cls.fkey_map[key])
+                model_id_abbr = cls.MODEL_ABBR + "-"
+                if val.startswith(model_id_abbr):
+                   val = val.split(model_id_abbr)[-1] 
                 rec_id = cls.replace_name_with_id(model=model, name=val)
                 payload[key] = rec_id
             elif key.endswith("_ids"):
@@ -449,8 +451,8 @@ class Model(metaclass=Meta):
             `Requests.exceptions.HTTPError`: The status code is not ok.
         """
         payload = cls.set_id_in_fkeys(payload)
-        payload = cls.add_model_name_to_payload(payload)
         payload = cls.check_boolean_fields(payload)
+        payload = cls.add_model_name_to_payload(payload)
         cls.debug_logger.debug("POSTING payload {}".format(json.dumps(payload, indent=4)))
         res = requests.post(url=cls.URL, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
@@ -488,6 +490,10 @@ class Model(metaclass=Meta):
         fout.write(response.text)
         fout.close()
 
+class Address(Model):
+    MODEL_NAME = "address"
+    MODEL_ABBR = "AD"
+
 class Antibody(Model):
     MODEL_NAME = "antibody"
     MODEL_ABBR = "AB"
@@ -503,6 +509,19 @@ class Barcode(Model):
 class Biosample(Model):
     MODEL_NAME = "biosample"
     MODEL_ABBR = "B"
+    fkey_map = {}
+    fkey_map["biosample_term_name_id"] = "BiosampleTermName"
+    fkey_map["biosample_type_id"] = "BiosampleType"
+    fkey_map["chipseq_experiment_id"] = "ChipseqExperiment"
+    fkey_map["crispr_modification_id"] = "CrisprModification"
+    fkey_map["donor_id"] = "Donor"
+    fkey_map["owner_id"] = "Owner"
+    fkey_map["part_of_id"] = "Biosample"
+    fkey_map["transfected_by_id"] = "User"
+    fkey_map["vendor_id"] = "Vendor"
+    fkey_map["document_ids"] = "Document"
+    fkey_map["pooled_from_biosamples"] = "Biosample"
+    fkey_map["treatment_ids"] = "Treatment"
 
 class BiosampleOntology(Model):
     MODEL_NAME = "biosample_ontology"
@@ -622,6 +641,14 @@ class PairedBarcode(Model):
 class Plate(Model):
     MODEL_NAME = "plate"
     MODEL_ABBR = "PL"
+
+class Shipping(Model):
+    MODEL_NAME = "shipping"
+    MODEL_ABBR = "SH"
+    fkey_map = {}
+    fkey_map["biosample_id"] = "Biosample"
+    fkey_map["from_id"] = "Address"
+    fkey_map["to_id"] = "Address"
     
 
 class SingleCellSorting(Model):
