@@ -621,7 +621,7 @@ class Document(Model):
     MODEL_NAME = "document"
     MODEL_ABBR = "DOC"
 
-    def download(self, rec_id):
+    def download(self):
         # The sever is Base64 encoding the payload, so we'll need to base64 decode it.
         url = self.record_url + "/download"
         res = requests.get(url=url, headers=self.HEADERS, verify=False)

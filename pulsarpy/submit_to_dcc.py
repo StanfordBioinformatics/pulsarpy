@@ -186,7 +186,7 @@ class Submit():
         payload["document_type"] = doc_type.name
         content_type = rec.content_type
         # Create attachment for the attachment prop
-        file_contents = models.Document.download(rec_id)
+        file_contents = rec.download()
         data = base64.b64encode(file_contents)
         temp_uri = str(data, "utf-8")
         href = "data:{mime_type};base64,{temp_uri}".format(mime_type=content_type, temp_uri=temp_uri)
@@ -214,7 +214,8 @@ class Submit():
         conc = rec.concentration
         if conc:
             payload["amount"] = conc
-            payload["amount_units"] = rec.concentration_unit["name"]
+            conc_unit = models.Unit(rec.concentration_unit_id)
+            payload["amount_units"] = conc_unit.name
         duration = rec.duration
         if duration:
             payload["duration"] = duration
@@ -223,13 +224,15 @@ class Submit():
         if temp:
             payload["temperature"] = temp
             payload["temperature_units"] = "Celsius"
-        payload["treatment_term_id"] = rec.treatment_term_name["accession"]
-        payload["treatment_term_name"] = rec.treatment_term_name["name"]
+        ttn = models.TreatmentTermName(rec.treatment_term_name_id)
+        payload["treatment_term_id"] = ttn["accession"]
+        payload["treatment_term_name"] = ttn["name"]
         payload["treatment_type"] = rec.treatment_type
 
-        documents = rec.documents
+        doc_ids = rec.document_ids
+        docs = [models.Document(d) for d in doc_ids]
         doc_upstreams = []
-        for doc in documents:
+        for doc in docs:
             doc_upstream = self.get_upstream_id(doc) 
             if not doc_upstream:
                 doc_upstream = post_document(doc)
