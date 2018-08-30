@@ -169,7 +169,7 @@ class Submit():
     
 
     def get_upstream_id(self, rec):
-        return rec[self.UPSTREAM_ATTR]
+        return rec.attrs.get(self.UPSTREAM_ATTR)
     
     def post_document(self, rec_id, patch=False):
         rec = models.Document(rec_id)
@@ -180,9 +180,10 @@ class Submit():
             aliases.append(self.clean_name(name))
         payload = {}
         payload["aliases"] = aliases
-        payload[self.UPSTREAM_ATTR] = rec.get(self.UPSTREAM_ATTR)
+        payload[self.UPSTREAM_ATTR] = self.get_upstream_id(rec)
         payload["description"] = rec.description
-        payload["document_type"] = rec.document_type["name"]
+        doc_type = models.DocumentType(rec.document_type_id)
+        payload["document_type"] = doc_type.name
         content_type = rec.content_type
         # Create attachment for the attachment prop
         file_contents = models.Document.download(rec_id)
@@ -209,7 +210,7 @@ class Submit():
             aliases.append(self.clean_name(name))
         payload = {}
         payload["aliases"] = aliases
-        payload[self.UPSTREAM_ATTR] = rec.get(self.UPSTREAM_ATTR)
+        payload[self.UPSTREAM_ATTR] = self.get_upstream_id(rec) 
         conc = rec.concentration
         if conc:
             payload["amount"] = conc
@@ -229,7 +230,7 @@ class Submit():
         documents = rec.documents
         doc_upstreams = []
         for doc in documents:
-            doc_upstream = doc.get(self.UPSTREAM_ATTR)
+            doc_upstream = self.get_upstream_id(doc) 
             if not doc_upstream:
                 doc_upstream = post_document(doc)
             doc_upstreams.append(doc_upstream)
@@ -298,7 +299,7 @@ class Submit():
     
         cm = rec.crispr_modification
         if cm:
-            cm_upstream = cm.get(self.UPSTREAM_ATTR)
+            cm_upstream = self.get_upstream_id(cm) 
             if not cm_upstream:
                 cm_upstream = self.post_crispr_modification(cm_id)
             payload["genetic_modifications"] = cm_upstream
@@ -307,13 +308,14 @@ class Submit():
         if documents:
             doc_upstreams = []
             for doc in documents:
-                doc_upstream = doc.get(self.UPSTREAM_ATTR)
+                doc_upstream = self.get_upstream_id(doc) 
                 if not doc_upstream:
                     doc_upstream = self.post_document(doc.id)
                 doc_upstreams.append(doc_upstream)
             payload["documents"] = doc_upstreams
     
-        donor_upstream = rec.donor.get(self.UPSTREAM_ATTR)
+        donor_rec = models.Donor(rec.donor_id)
+        donor_upstream = self.get_upstream_id(donor_rec) 
         if not donor_upstream:
             raise Exception("Donor '{}' of biosample '{}' does not have its upstream set. Donors must be registered with the DCC directly.".format(rec["donor"]["id"], rec_id))
         payload["donor"] = donor_upstream
@@ -321,7 +323,7 @@ class Submit():
     
         part_of_biosample = rec.part_of
         if part_of_biosample:
-            pob_upstream = part_of_biosample.get(self.UPSTREAM_ATTR)
+            pob_upstream = self.get_upstream_id(part_of_biosample) 
             if not pob_upstream:
                 pob_upstream = self.post_biosample(part_of_biosample.id)
             payload["part_of"] = pob_upstream
@@ -330,12 +332,13 @@ class Submit():
         if pooled_from_biosamples:
             payload["pooled_from"] = []
             for p in pooled_from_biosamples:
-                p_upstream = p.get(self.UPSTREAM_ATTR)
+                p_upstream = self.get_upstream_id(p) 
                 if not p_upstream:
                     p_upstream = self.post_biosample(p.id)
                 payload["pooled_from"].append(p_upstream)
     
-        vendor_upstream = rec.vendor.get(self.UPSTREAM_ATTR)
+        vendor = models.Vendor(rec.vendor_id)
+        vendor_upstream = self.get_upstream_id(vendor) 
         if not vendor_upstream:
             raise Exception("Biosample '{}' has a vendor without an upstream set: Vendors are requied to be registered by the DCC personel, and Pulsar needs to have the Vendor record's '{}' attribute set.".format(rec_id, self.UPSTREAM_ATTR))
         payload["source"] = vendor_upstream
@@ -368,16 +371,18 @@ class Submit():
           aliases.append(self.clean_name(name))
         payload = {}
         payload["aliases"] = aliases
-        payload[self.UPSTREAM_ATTR] = rec.get(self.UPSTREAM_ATTR)
+        payload[self.UPSTREAM_ATTR] = self.get_upstream_id(rec)
         payload["nucleic_acid_term_name"] = rec.nucleic_acid_term["name"]
-        biosample_upstream = rec.biosample.get(self.UPSTREAM_ATTR)
+        biosample = models.Biosample(rec.biosample_id)
+        biosample_upstream = self.get_upstream_id(biosample) 
         if not biosample_upstream:
             biosample_upstream = self.post_biosample(rec_id=rec.biosample_id, patch=False)
         payload["biosample"] = biosample_upstream
-        docs = rec.documents
+        doc_ids = rec.document_ids
+        docs = [models.Document(d) for d in doc_ids]
         doc_upstreams = []
         for d in docs:
-            upstream = d.get(self.UPSTREAM_ATTR)
+            upstream = self.get_upstream_id(d) 
             if not upstream:
                 upstream = self.post_document(rec_id=d["id"], patch=False)
                 doc_upstreams.append(upstream)
@@ -393,7 +398,52 @@ class Submit():
         payload["source"] = rec.vendor["id"]
         ssc = library.single_cell_sorting
         if ssc:
-            barcode_details = {}
+           barcode_details = self.get_barcode_details_for_ssc(ssc_id=ssc["id"])
+           payload["barcode_details"] = barcode_details
+
+    def post_replicate(self, library_upstream, patch=False):
+        """
+        Args:
+            library_upstream - The identifier of a Library record on the ENCODE Portal, which is
+                 stored in Pulsar via the upstream_identifier attribute of a Library record.
+        """
+        #dcc_lib = self.ENC_CONN.get(ignore404=False, rec_ids=dcc_library_id)       
+        pulsar_lib = models.Library.find_by({"upstream_identifier": library_upstream})
+        biosample = pulsar_lib["biosample"]
+        pulsar_biosample = models.Biosample()
+        payload = {}
+        payload["antibody"] = "ENCAB728YTO" #AB-9 in Pulsar
+        #payload["aliases"] = 
+        payload["biological_replicate_number"] = biosample["replicate_number"]
+        payload["experiment"] = experiment_upstream
+        payload["library"] = library_upstream
+
+    def get_exp_of_biosample(self, biosample_rec):
+        """
+        Determines whether the biosample is part of a ChipseqExperiment or SingleCellSorting
+        Experiment, and if so, returns the associated experiment as a models.Model instance that
+        is one of those two classes. The biosample is determined to be part of a ChipseqExperiment if the Biosample.chipseq_experiment_id
+        attribute is set, meaning that the biosample can be associated to the ChipseqExperiment 
+        as a replicate via any of of the following ChipseqExperiment attributes:
+            ChipseqExperiment.replicates
+            ChipseqExperiment.control_replicates
+        The biosample will be determined to be part of a SingleCellSorting experiment if the 
+        Biosample.sorting_biosample_single_cell_sorting attribute is set, meaning that it is the
+        SingleCellSorting.sorting_biosample.
+
+        Args:
+            biosample_rec: `dict`. A Biosample record as returned by instantiating `models.Biosample`.
+
+        Raises:
+            `Exception`: An experiment is not associated to this biosample.
+        """
+        chip_exp_id = biosample_rec.chipseq_experiment_id
+        ssc_id = biosample_rec.sorting_biosample_single_cell_sorting_id
+        if chip_exp_id:
+            return models.ChipseqExperiment(chip_exp_id)
+        elif ssc_id:
+            return models.SingleCellSorting(ssc_id)
+        raise Exception("Biosample {} is not on an experiment.".format(biosample_rec["id"]))
 
     def get_barcode_details_for_ssc(self, ssc_id):
         """
@@ -405,21 +455,29 @@ class Submit():
             ssc_id: The Pulsar ID for a SingleCellSorting record.
         """
         ssc = models.SingleCellSorting(ssc_id)
-        paired_end = ssc.library_prototype["paired_end"]
-        plates = ssc.plates
+        lib_prototype_id = ssc.library_prototype_id
+        lib = models.Library(lib_prototype_id)
+        paired_end = lib.paired_end
+        plate_ids = ssc.plate_ids
+        plates = [models.Plate(p) for p in plate_ids]
         results = []
         for p in plates:
-            for well in p["wells"]:
+            for well_id in p.well_ids:
+                well = models.Well(well_id)
                 details = {}
-                details["plate_id"] = p["name"]
-                details["plate_location"] = well["name"]
-                lib = well["biosample"]["libraries"][-1]
+                details["plate_id"] = p.name
+                details["plate_location"] = well.name
+                well_biosample = models.Biosample(well.biosample_id)
+                lib_id = well_biosample.library_ids[-1]
                 # Doesn't make sense to have more than one library for single cell experiments. 
+                lib = models.Library(lib_id)
                 if not paired_end:
-                    barcode = lib["barcode"]["sequence"]
+                    barcode_id = lib.barcode_id
+                    barcode = models.Barcode(barcode_id).sequence
                 else:
-                    pbc = lib["paired_barcode"]
-                    barcode = pbc["index1"]["sequence"] + "-" + pbc["index2"]["sequence"]
+                    pbc_id = lib.paired_barcode_id
+                    pbc = models.PairedBarcode(pbc_id)
+                    barcode = pbc.index1["sequence"] + "-" + pbc.index2["sequence"]
                 details["barcode"] = barcode
                 results.append(details)
         return results

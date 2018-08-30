@@ -174,20 +174,29 @@ class Model(metaclass=Meta):
     error_logger.error(log_msg) 
     
 
-    def __init__(self, rec_id):
+    def __init__(self, uid=None, upstream=None):
         """
+        Find the record of the given model specified by self.MODEL_NAME. The record can be looked up
+        in a few ways, depending on which argument is specified (uid or upstream). If both are specified,
+        then the upstream argument will be ignored. 
+
         Args:
             uid: The database identifier of the record to fetch, which can be specified either as the
                 primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
-                rec_id could also be the record's name, and if so will be converted to the record ID.
+                rec_id could also be the record's name if it has a name attribute (not all models do)
+                and if so will be converted to the record ID.
+            upstream: If set, then the record will be searched on its upstream_identifier attribute. 
         """
         # self.attrs will store the actual record's attributes. Initialize value now to empty dict
         # since it is expected to be set already in self.__setattr__().
         self.__dict__["attrs"] = {}
         # rec_id could be the record's name. Check for that scenario, and convert to record ID if
         # necessary.
-        self.rec_id = str(Model.replace_name_with_id(self.__class__, rec_id))
-        self.record_url = os.path.join(self.URL, self.rec_id)
+        if uid:
+            self.rec_id = Model.replace_name_with_id(self.__class__, uid)
+        else:
+            self.rec_id = Model.find_by({"upstream_identifier": upstream})["id"]
+        self.record_url = os.path.join(self.URL, str(self.rec_id))
         self.__dict__["attrs"] = self._get() #avoid call to self.__setitem__() for this attr.
         self.log_error("Connecting to {}".format(p.URL))
 
@@ -555,6 +564,14 @@ class ChipseqExperiment(Model):
     fkey_map["user_id"] = "User"
     fkey_map["wild_type_input_id"] = "BiosampleReplicate"
 
+class Document(Model):
+    MODEL_NAME = "document"
+    MODEL_ABBR = "DOC"
+
+class DocumentType(Model):
+    MODEL_NAME = "document_type"
+    MODEL_ABBR = "DOCTY"
+
 class Unit(Model):
     MODEL_NAME = "Unit"
     MODEL_ABBR = "UN"
@@ -742,6 +759,10 @@ class User(Model):
 class Vendor(Model):
     MODEL_NAME = "vendor"
     MODEL_ABBR = "V"
+
+class Well(Model):
+    MODEL_NAME = "well"
+    MODEL_ABBR = "WELL"
 
 #if __name__ == "__main__":
     # pdb.set_trace()
