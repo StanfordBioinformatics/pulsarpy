@@ -263,13 +263,14 @@ class Submit():
           aliases.append(self.clean_name(name))
         payload = {}
         payload["aliases"] = aliases
-        btn_name = rec.biosample_term_name["name"].lower() # #Portal requires lower-case.
-        payload["biosample_term_name"] = btn_name
-        payload["biosample_term_id"] = rec.biosample_term_name["accession"]
-        payload["biosample_type"] = rec.biosample_type["name"]
+        btn = models.BiosampleTermName(rec.biosample_term_name_id)
+        payload["biosample_term_name"] = btn.name.lower() #Portal requires lower-case
+        payload["biosample_term_id"] = btn.accession
+        bty = models.BiosampleType(rec.biosample_type_id)
+        payload["biosample_type"] = bty.name
         date_biosample_taken = rec.date_biosample_taken
         if date_biosample_taken:
-            if biosample_type == "tissue":
+            if bty.name == "tissue":
                 payload["date_obtained"] = date_biosample_taken
             else:
                 payload["culture_harvest_date"] = date_biosample_taken
@@ -289,7 +290,7 @@ class Submit():
         starting_amount = rec.starting_amount
         if starting_amount:
             payload["starting_amount"] = starting_amount
-            payload["starting_amount_units"] = rec.starting_amount_units["name"]
+            payload["starting_amount_units"] = models.Unit(rec.starting_amount_units_id).name
         submitter_comment = rec.submitter_comments
         if submitter_comment:
             payload["submitter_comment"] = submitter_comment
@@ -300,39 +301,42 @@ class Submit():
         if prod_id:
             payload["product_id"] = prod_id
     
-        cm = rec.crispr_modification
-        if cm:
+        cm_id = rec.crispr_modification_id
+        if cm_id:
+            cm = models.CrisprModification(cm_id)
             cm_upstream = self.get_upstream_id(cm) 
             if not cm_upstream:
                 cm_upstream = self.post_crispr_modification(cm_id)
             payload["genetic_modifications"] = cm_upstream
     
-        documents = rec.documents
-        if documents:
+        doc_ids = rec.document_ids
+        if doc_ids:
+            docs = [models.Document(d) for d in doc_ids]
             doc_upstreams = []
-            for doc in documents:
+            for doc in doc:
                 doc_upstream = self.get_upstream_id(doc) 
                 if not doc_upstream:
                     doc_upstream = self.post_document(doc.id)
                 doc_upstreams.append(doc_upstream)
             payload["documents"] = doc_upstreams
     
-        donor_rec = models.Donor(rec.donor_id)
-        donor_upstream = self.get_upstream_id(donor_rec) 
+        donor = models.Donor(rec.donor_id)
+        donor_upstream = self.get_upstream_id(donor) 
         if not donor_upstream:
-            raise Exception("Donor '{}' of biosample '{}' does not have its upstream set. Donors must be registered with the DCC directly.".format(rec["donor"]["id"], rec_id))
+            raise Exception("Donor '{}' of biosample '{}' does not have its upstream set. Donors must be registered with the DCC directly.".format(donor.id, rec_id))
         payload["donor"] = donor_upstream
     
-    
-        part_of_biosample = rec.part_of
-        if part_of_biosample:
+        part_of_biosample_id = rec.part_of_id
+        if part_of_biosample_id:
+            part_of_biosample = models.Biosample(part_of_biosample_id)
             pob_upstream = self.get_upstream_id(part_of_biosample) 
             if not pob_upstream:
-                pob_upstream = self.post_biosample(part_of_biosample.id)
+                pob_upstream = self.post_biosample(part_of_biosample_id)
             payload["part_of"] = pob_upstream
     
-        pooled_from_biosamples = rec.pooled_from_biosamples
-        if pooled_from_biosamples:
+        pooled_from_biosample_ids = rec.pooled_from_biosample_ids
+        if pooled_from_biosample_ids:
+            pooled_from_biosamples = [models.Biosample(b) for p in pooled_from_biosample_ids]
             payload["pooled_from"] = []
             for p in pooled_from_biosamples:
                 p_upstream = self.get_upstream_id(p) 
@@ -346,14 +350,17 @@ class Submit():
             raise Exception("Biosample '{}' has a vendor without an upstream set: Vendors are requied to be registered by the DCC personel, and Pulsar needs to have the Vendor record's '{}' attribute set.".format(rec_id, self.UPSTREAM_ATTR))
         payload["source"] = vendor_upstream
     
-        treatments = rec.treatments
+        treatment_ids = rec.treatment_ids
         treat_upstreams = []
-        for treat in treatments:
-            treat_upstream = treat.get(self.PSTREAM_ATTR)
-            if not treat_upstream:
-                treat_upstream = self.post_treatment(treat.id)
-            treat_upstreams.append(treat_upstream)
-        payload["treatments"] = treat_upstreams
+        if treatment_ids:
+            treatments = [models.Treatment(t) for t in treatment_ids]
+            treat_upstreams = []
+            for treat in treatments:
+                treat_upstream = self.get_upstream_id(treat)
+                if not treat_upstream:
+                    treat_upstream = self.post_treatment(treat.id)
+                treat_upstreams.append(treat_upstream)
+            payload["treatments"] = treat_upstreams
    
         if patch:  
             res = self.patch(payload=payload, pulsar_rec_id=rec_id)
