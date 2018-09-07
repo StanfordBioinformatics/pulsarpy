@@ -15,6 +15,7 @@ Required Environment Variables
 """
 
 import base64
+import logging
 
 from pulsarpy import models
 import encode_utils as eu
@@ -69,13 +70,11 @@ class Submit():
         return name.replace("#","").replace("/","-")
                   
 
-    def patch(self, pulsar_rec_id,  payload, raise_403=True, extend_array_values=False):
+    def patch(self, payload, raise_403=True, extend_array_values=False):
         """Updates a record in the ENCODE Portal based on its state in Pulsar. 
     
         Args:
             payload: `dict`. containing the attribute key and value pairs to patch.
-            pulsar_rec_id: `str`. The Pulsar record identifier of the record we are POSTING to the DCC. Must
-                contain the model prefix, i.e. DOC-3 for the document record with primary ID 3.   
             raise_403: `bool`. `True` means to raise a ``requests.exceptions.HTTPError`` if a 403 status
                 (forbidden) is returned.
                 If set to `False` and there still is a 403 return status, then the object you were
@@ -98,7 +97,7 @@ class Submit():
         """
         upstream = payload.pop(self.UPSTREAM_ATTR)
         if not upstream:
-            raise UpstreamNotSet("Pulsar record '{}' has no upstream value set.".format(pulsar_rec_id))
+            raise UpstreamNotSet("Payload '{}' has no upstream value set.".format(payload))
         payload[self.ENC_CONN.ENCID_KEY] = upstream
         res = self.ENC_CONN.patch(payload=payload, raise_403=raise_403, extend_array_values=extend_array_values)
         # res will be {} if record doesn't exist on the ENCODE Portal.
@@ -153,7 +152,8 @@ class Submit():
         # we don't want to set it to an upstream identifiers from any of the ENOCODE Portal test servers. 
         if self.dcc_mode == eu.DCC_PROD_MODE:
             print("Setting the Pulsar record's upstream_identifier attribute to '{}'.".format(upstream))
-            pulsar_model.patch(uid=pulsar_rec_id, payload={"upstream_identifier": upstream})
+            pulsar_rec = pulsar_model(pulsar_rec_id)
+            pulsar_rec.patch(payload={"upstream_identifier": upstream})
             print("upstream_identifier attribute set successfully.")
         return upstream
     
@@ -167,7 +167,6 @@ class Submit():
         res = self.post(payload=payload, dcc_profile="genetic_modification", pulsar_model=models.CrisprModification, pulsar_rec_id=rec_id)
         return res
     
-
     def get_upstream_id(self, rec):
         return rec.attrs.get(self.UPSTREAM_ATTR)
     
@@ -196,7 +195,7 @@ class Submit():
         attachment["href"] = href
         payload["attachment"] = attachment
         if patch:
-            res = self.patch(payload=payload, pulsar_rec_id=rec_id)
+            res = self.patch(payload=payload)
         else:
             res = self.post(payload=payload, dcc_profile="document", pulsar_model=models.Document, pulsar_rec_id=rec_id)
         return res
@@ -240,7 +239,7 @@ class Submit():
         payload["documents"] = doc_upstreams
         # Submit
         if patch:
-            res = self.patch(payload=payload, pulsar_rec_id=rec_id)
+            res = self.patch(payload=payload)
         else:
             res = self.post(payload=payload, dcc_profile="treatment", pulsar_model=models.Treatment, pulsar_rec_id=rec_id)
         return res
@@ -363,7 +362,7 @@ class Submit():
             payload["treatments"] = treat_upstreams
    
         if patch:  
-            res = self.patch(payload=payload, pulsar_rec_id=rec_id)
+            res = self.patch(payload=payload)
         else:
             res = self.post(payload=payload, dcc_profile="biosample", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
         return res
@@ -372,6 +371,8 @@ class Submit():
         """
         This method will check whether the biosample associated to this library is submitted. If it
         isn't, it will first submit the biosample. 
+
+        Args:
         """
         rec = models.Library(rec_id)
         aliases = []
@@ -382,8 +383,9 @@ class Submit():
         payload = {}
         payload["aliases"] = aliases
         payload[self.UPSTREAM_ATTR] = self.get_upstream_id(rec)
-        payload["nucleic_acid_term_name"] = rec.nucleic_acid_term["name"]
         biosample = models.Biosample(rec.biosample_id)
+        # If this Library record is a SingleCellSorting.library_prototype, then the Biosample it will
+        # be linked to is the SingleCellSorting.sorting_biosample.
         biosample_upstream = self.get_upstream_id(biosample) 
         if not biosample_upstream:
             biosample_upstream = self.post_biosample(rec_id=rec.biosample_id, patch=False)
@@ -394,22 +396,37 @@ class Submit():
         for d in docs:
             upstream = self.get_upstream_id(d) 
             if not upstream:
-                upstream = self.post_document(rec_id=d["id"], patch=False)
+                upstream = self.post_document(rec_id=d.id, patch=False)
                 doc_upstreams.append(upstream)
         if doc_upstreams:
             payload["documents"] = doc_upstreams
-        fragmentation_method = rec.library_fragmentation_method
-        if fragmentation_method:
-            payload["fragmentation_method"] = fragmentation_method["name"]
+        fragmentation_method_id = rec.library_fragmentation_method_id
+        if fragmentation_method_id:
+            fragmentation_method = models.LibraryFragmentationMethod(fragmentation_method_id).name
+            payload["fragmentation_method"] = fragmentation_method.name
         payload["lot_id"] = rec.lot_identifier
+        payload["nucleic_acid_term_name"] = models.NucleicAcidTerm(rec.nucleic_acid_term_id).name
         payload["product_id"] = rec.vendor_product_identifier
         payload["size_range"] = rec.size_range
         payload["strand_specificity"] = rec.strand_specific
-        payload["source"] = rec.vendor["id"]
-        ssc = library.single_cell_sorting
-        if ssc:
-           barcode_details = self.get_barcode_details_for_ssc(ssc_id=ssc["id"])
+        vendor_id = rec.vendor_id
+        if vendor_id:
+            vendor_upstream = self.get_upstream_id(vendor_id)
+            if not vendor_upstream:
+                vendor_upstream = self.post_vendor(rec_id=vendor_id)
+            payload["source"] = vendor_upstream
+        ssc_id = rec.single_cell_sorting_id
+        if ssc_id:
+           barcode_details = self.get_barcode_details_for_ssc(ssc_id=ssc_id)
            payload["barcode_details"] = barcode_details
+
+        # Submit payload
+        if patch:  
+            res = self.patch(payload=payload)
+        else:
+            res = self.post(payload=payload, dcc_profile="biosample", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
+        return res
+        return payload
 
     def post_replicate(self, library_upstream, patch=False):
         """
@@ -499,7 +516,8 @@ class Submit():
         name = rec.name
         if name: 
           aliases.append(self.clean_name(name))
-        sorting_biosample = rec.sorting_biosample
+        sorting_biosample_id = rec.sorting_biosample_id
+        sorting_biosample = models.Biosample(sorting_biosample_id)
         payload = {}
         # Set the explicitly required properties first:
         payload["aliases"] = aliases
@@ -507,8 +525,8 @@ class Submit():
         payload["biosample_type"] = sorting_biosample["biosample_type"]["name"]
         payload["experiment_classification"] = "functional genomics"
         # And now the rest
-        payload["biosample_term_name"] = starting_biosample["biosample_term_name"]["name"]
-        payload["biosmple_term_id"] = starting_biosample["biosample_term_name"]["accession"]
+        payload["biosample_term_name"] = sorting_biosample["biosample_term_name"]["name"]
+        payload["biosmple_term_id"] = sorting_biosample["biosample_term_name"]["accession"]
         payload["description"] = rec.description
         docs = rec.documents
         doc_upstreams = []
@@ -519,6 +537,6 @@ class Submit():
 
         # Submit biosample
         biosample_upstream = self.post_biosample(rec_id=sorting_biosample.id, patch=patch)
-        # Submit library
+        # Submit library_prototype (linked to sorting_biosample)
         library_prototype = rec.library_prototype
         library_upstream = self.post_library(rec_id=library_prototype.id, patch=patch)
