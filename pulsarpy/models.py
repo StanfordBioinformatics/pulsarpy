@@ -121,6 +121,7 @@ class Meta(type):
         logger.addHandler(handler)
 
     def __init__(newcls, classname, supers, classdict):
+        newcls.MODEL_NAME = inflection.underscore(newcls.__name__)
         newcls.URL = os.path.join(p.URL, inflection.pluralize(newcls.MODEL_NAME))
 
 
@@ -143,7 +144,7 @@ class Model(metaclass=Meta):
         1) PULSAR_API_URL
         2) PULSAR_TOKEN
     """
-    MODEL_NAME = ""  # subclasses define
+    MODEL_ABBR = ""  # subclasses define
     HEADERS = {'accept': 'application/json', 'content-type': 'application/json', 'Authorization': 'Token token={}'.format(p.API_TOKEN)}
 
     #: A reference to the `debug` logging instance that was created earlier in ``encode_utils.debug_logger``.
@@ -194,8 +195,10 @@ class Model(metaclass=Meta):
         # necessary.
         if uid:
             self.rec_id = Model.replace_name_with_id(self.__class__, uid)
-        else:
+        elif upstream:
             self.rec_id = Model.find_by({"upstream_identifier": upstream})["id"]
+        else:
+            raise ValueError("Either the 'uid' or 'upstream' parameter must be set.")
         self.record_url = os.path.join(self.URL, str(self.rec_id))
         self.__dict__["attrs"] = self._get() #avoid call to self.__setitem__() for this attr.
         self.log_error("Connecting to {}".format(p.URL))
@@ -500,23 +503,18 @@ class Model(metaclass=Meta):
         fout.close()
 
 class Address(Model):
-    MODEL_NAME = "address"
     MODEL_ABBR = "AD"
 
 class Antibody(Model):
-    MODEL_NAME = "antibody"
     MODEL_ABBR = "AB"
 
 class AntibodyPurification(Model):
-    MODEL_NAME = "antibody_purification"
     MODEL_ABBR = "AP"
 
 class Barcode(Model):
-    MODEL_NAME = "barcode"
     MODEL_ABBR = "BC"
 
 class Biosample(Model):
-    MODEL_NAME = "biosample"
     MODEL_ABBR = "B"
     fkey_map = {}
     fkey_map["biosample_term_name_id"] = "BiosampleTermName"
@@ -533,11 +531,9 @@ class Biosample(Model):
     fkey_map["treatment_ids"] = "Treatment"
 
 class BiosampleOntology(Model):
-    MODEL_NAME = "biosample_ontology"
     MODEL_ABBR = "BO"
 
 class BiosampleReplicate(Model):
-    MODEL_NAME = "biosample_replicate"
     MODEL_ABBR = "BR"
     fkey_map = {}
     fkey_map["biosample_id"] = "Biosample"
@@ -546,15 +542,12 @@ class BiosampleReplicate(Model):
     fkey_map["user_id"] = "User"
 
 class BiosampleTermName(Model):
-    MODEL_NAME = "biosample_term_name"
     MODEL_ABBR = "BTN"
 
 class BiosampleType(Model):
-    MODEL_NAME = "biosample_type"
     MODEL_ABBR = "BTY"
 
 class ChipseqExperiment(Model):
-    MODEL_NAME = "chipseq_experiment"
     MODEL_ABBR = "CS"
     fkey_map = {}
     fkey_map["document_ids"] = "Document"
@@ -565,27 +558,21 @@ class ChipseqExperiment(Model):
     fkey_map["wild_type_input_id"] = "BiosampleReplicate"
 
 class Document(Model):
-    MODEL_NAME = "document"
     MODEL_ABBR = "DOC"
 
 class DocumentType(Model):
-    MODEL_NAME = "document_type"
     MODEL_ABBR = "DOCTY"
 
 class Unit(Model):
-    MODEL_NAME = "Unit"
     MODEL_ABBR = "UN"
 
 class ConstructTag(Model):
-    MODEL_NAME = "construct_tag"
     MODEL_ABBR = "CT"
 
 class CrisprConstruct(Model):
-    MODEL_NAME = "crispr_construct"
     MODEL_ABBR = "CC"
 
 class CrisprModification(Model):
-    MODEL_NAME = "crispr_modification"
     MODEL_ABBR = "CRISPR"
     fkey_map = {}
     fkey_map["biosample_id"] = "Biosample"
@@ -610,15 +597,12 @@ class CrisprModification(Model):
                 
 
 class Donor(Model):
-    MODEL_NAME = "donor"
     MODEL_ABBR = "DON"
 
 class DonorConstruct(Model):
-    MODEL_NAME = "donor_construct"
     MODEL_ABBR = "DONC"
 
 class Document(Model):
-    MODEL_NAME = "document"
     MODEL_ABBR = "DOC"
 
     def download(self):
@@ -630,7 +614,6 @@ class Document(Model):
         return data
 
 class Library(Model):
-    MODEL_NAME = "library"
     MODEL_ABBR = "L"
     fkey_map = {}
     # belongs_to/ has_one
@@ -649,18 +632,21 @@ class Library(Model):
     # has_many
     fkey_map["document_ids"] = "Document"
 
+class LibraryFragmentationMethod(Model):
+    MODEL_ABBR = "LFM"
+
+
+class NucleicAcidTerm(Model):
+    MODEL_ABBR = "NAT"
 
 class PairedBarcode(Model):
-    MODEL_NAME = "paired_barcode"
     MODEL_ABBR = "PBC"
     
 
 class Plate(Model):
-    MODEL_NAME = "plate"
     MODEL_ABBR = "PL"
 
 class Shipping(Model):
-    MODEL_NAME = "shipping"
     MODEL_ABBR = "SH"
     fkey_map = {}
     fkey_map["biosample_id"] = "Biosample"
@@ -669,7 +655,6 @@ class Shipping(Model):
     
 
 class SingleCellSorting(Model):
-    MODEL_NAME = "single_cell_sorting"
     MODEL_ABBR = "SCS"
     fkey_map = {}
     fkey_map["analysis_ids"] = "Analysis"
@@ -682,7 +667,6 @@ class SingleCellSorting(Model):
     
 
 class Target(Model):
-    MODEL_NAME = "target"
     MODEL_ABBR = "TRG"
     fkey_map = {}
     fkey_map["user_id"] = "User"
@@ -691,15 +675,12 @@ class Target(Model):
     fkey_map["donor_construct_ids"] = "DonorConstruct"
 
 class Treatment(Model):
-    MODEL_NAME = "treatment"
     MODEL_ABBR = "TRT"
 
 class TreatmentTermName(Model):
-    MODEL_NAME = "treatment_term_name"
     MODEL_ABBR = "TTN"
 
 class User(Model):
-    MODEL_NAME = "users"
 
     def archive_user(self, user_id):
         """Archives the user with the specified user ID.
@@ -757,11 +738,9 @@ class User(Model):
 
 
 class Vendor(Model):
-    MODEL_NAME = "vendor"
     MODEL_ABBR = "V"
 
 class Well(Model):
-    MODEL_NAME = "well"
     MODEL_ABBR = "WELL"
 
 #if __name__ == "__main__":
