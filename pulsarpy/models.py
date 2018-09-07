@@ -311,10 +311,8 @@ class Model(metaclass=Meta):
         Searches the model in question by AND joining the query parameters.
 
         Implements a Railsy way of looking for a record using a method by the same name and passing
-        in the query as a dict. as well.
-
-        Only the first hit is returned, and there is no particular ordering specified in the server-side
-        API method.
+        in the query as a dict. as well. Only the first hit is returned, and there is no particular 
+        ordering specified in the server-side API method.
 
         Args:
             payload: `dict`. The attributes of a record to restrict the search to.
@@ -323,6 +321,8 @@ class Model(metaclass=Meta):
             `dict`: The JSON serialization of the record, if any, found by the API call.
             `None`: If the API call didnt' return any results.
         """
+        if not isinstance(payload, dict):
+            raise ValueError("The 'payload' parameter must be provided a dictionary object.")
         url = os.path.join(cls.URL, "find_by")
         payload = {"find_by": payload}
         print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
@@ -356,6 +356,8 @@ class Model(metaclass=Meta):
             `dict`: The JSON serialization of the record, if any, found by the API call.
             `None`: If the API call didnt' return any results.
         """
+        if not isinstance(payload, dict):
+            raise ValueError("The 'payload' parameter must be provided a dictionary object.")
         url = os.path.join(cls.URL, "find_by_or")
         payload = {"find_by_or": payload}
         print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
@@ -397,6 +399,8 @@ class Model(metaclass=Meta):
         Raises:
             `requests.exceptions.HTTPError`: The status code is not ok.
         """
+        if not isinstance(payload, dict):
+            raise ValueError("The 'payload' parameter must be provided a dictionary object.")
         if append_to_arrays:
             for key in payload:
                 val = payload[key]
@@ -462,6 +466,8 @@ class Model(metaclass=Meta):
         Raises:
             `Requests.exceptions.HTTPError`: The status code is not ok.
         """
+        if not isinstance(payload, dict):
+            raise ValueError("The 'payload' parameter must be provided a dictionary object.")
         payload = cls.set_id_in_fkeys(payload)
         payload = cls.check_boolean_fields(payload)
         payload = cls.add_model_name_to_payload(payload)

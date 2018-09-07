@@ -18,6 +18,7 @@ import base64
 import logging
 
 from pulsarpy import models
+import pulsarpy.utils
 import encode_utils as eu
 import encode_utils.connection as euc
 import pdb
@@ -424,53 +425,57 @@ class Submit():
         if patch:  
             res = self.patch(payload=payload)
         else:
-            res = self.post(payload=payload, dcc_profile="biosample", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
+            res = self.post(payload=payload, dcc_profile="library", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
         return res
-        return payload
 
     def post_replicate(self, library_upstream, patch=False):
         """
+        Todo: Check what value to use for technical_replicate_number. 
         Args:
             library_upstream - The identifier of a Library record on the ENCODE Portal, which is
                  stored in Pulsar via the upstream_identifier attribute of a Library record.
         """
+        # Required fields to submit to a replicate are:
+        #  -biological_replicate_number
+        #  -experiment
+        #  -technical_replicate_number
+
         #dcc_lib = self.ENC_CONN.get(ignore404=False, rec_ids=dcc_library_id)       
-        pulsar_lib = models.Library.find_by({"upstream_identifier": library_upstream})
-        biosample = pulsar_lib["biosample"]
-        pulsar_biosample = models.Biosample()
+        lib = models.Library(upstream=library_upstream})
+        biosample_id = lib.biosample_id
+        biosample = models.Biosample(biosample_id)
         payload = {}
         payload["antibody"] = "ENCAB728YTO" #AB-9 in Pulsar
         #payload["aliases"] = 
-        payload["biological_replicate_number"] = biosample["replicate_number"]
+        # Set biological_replicate_number and technical_replicate_number. For ssATAC-seq experiments,
+        # these two attributes don't really make sense, but they are required to submit, so ...
+        brn = biosample.replicate_number
+        if not brn:
+            # Check if this is a SingleCellSorting.library_prototype - if so, replicate_number isn't
+            # really meaningful in Pulsar for the linked biosample, just default it to 1:
+            if lib.single_cell_sorting_id:
+                brn = 1
+            else:
+               raise Exception("Can't submit replicate object for library '{}' since the associated biosample doesn't have the replicate_number attribute set.".format(library_upstream))
+        payload["biological_replicate_number"] = brn
+        payload["technical_replicate_number"] = 1
+        # Figure out the experiment that this Biosample is associated to
+        exp_rec = pulsarpy.utils.get_exp_of_biosample(biosample)
+        if not exp_rec.upstream_identifier:
+            raise Exception("Can't submit replicate when the experiment it is linked to hasn't been submitted.")
         payload["experiment"] = experiment_upstream
         payload["library"] = library_upstream
+        # Submit payload
+        if patch:  
+            res = self.patch(payload=payload)
+        else:
+            res = self.post(payload=payload, dcc_profile="replicate", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
+        #return res
+        return payload
 
-    def get_exp_of_biosample(self, biosample_rec):
+    def post_file(self, pulsar_sres_id, pulsar patch=False):
         """
-        Determines whether the biosample is part of a ChipseqExperiment or SingleCellSorting
-        Experiment, and if so, returns the associated experiment as a models.Model instance that
-        is one of those two classes. The biosample is determined to be part of a ChipseqExperiment if the Biosample.chipseq_experiment_id
-        attribute is set, meaning that the biosample can be associated to the ChipseqExperiment 
-        as a replicate via any of of the following ChipseqExperiment attributes:
-            ChipseqExperiment.replicates
-            ChipseqExperiment.control_replicates
-        The biosample will be determined to be part of a SingleCellSorting experiment if the 
-        Biosample.sorting_biosample_single_cell_sorting attribute is set, meaning that it is the
-        SingleCellSorting.sorting_biosample.
-
-        Args:
-            biosample_rec: `dict`. A Biosample record as returned by instantiating `models.Biosample`.
-
-        Raises:
-            `Exception`: An experiment is not associated to this biosample.
-        """
-        chip_exp_id = biosample_rec.chipseq_experiment_id
-        ssc_id = biosample_rec.sorting_biosample_single_cell_sorting_id
-        if chip_exp_id:
-            return models.ChipseqExperiment(chip_exp_id)
-        elif ssc_id:
-            return models.SingleCellSorting(ssc_id)
-        raise Exception("Biosample {} is not on an experiment.".format(biosample_rec["id"]))
+        Creates a file record on the ENCODE Portal. 
 
     def get_barcode_details_for_ssc(self, ssc_id):
         """
@@ -536,7 +541,9 @@ class Submit():
         payload["documents"] = doc_upstreams
 
         # Submit biosample
-        biosample_upstream = self.post_biosample(rec_id=sorting_biosample.id, patch=patch)
+        self.post_biosample(rec_id=sorting_biosample.id, patch=patch)
         # Submit library_prototype (linked to sorting_biosample)
-        library_prototype = rec.library_prototype
-        library_upstream = self.post_library(rec_id=library_prototype.id, patch=patch)
+        library_prototype_id = rec.library_prototype_id
+        library_upstream = self.post_library(rec_id=library_prototype_id, patch=patch)
+        # Submit replicate
+        self.post_replicate(library_upstream=library_upstream, patch=patch)
