@@ -470,12 +470,13 @@ class Submit():
             res = self.patch(payload=payload)
         else:
             res = self.post(payload=payload, dcc_profile="replicate", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
-        #return res
-        return payload
+        return res
+        #return payload
 
     def post_file(self, pulsar_sres_id, pulsar patch=False):
         """
         Creates a file record on the ENCODE Portal. 
+        """
 
     def get_barcode_details_for_ssc(self, ssc_id):
         """
@@ -546,4 +547,13 @@ class Submit():
         library_prototype_id = rec.library_prototype_id
         library_upstream = self.post_library(rec_id=library_prototype_id, patch=patch)
         # Submit replicate
-        self.post_replicate(library_upstream=library_upstream, patch=patch)
+        replicate_upstream = self.post_replicate(library_upstream=library_upstream, patch=patch)
+        sreq_ids = rec.sequencing_request_ids 
+        sreqs = [models.SequencingRequest(s) for s in sreq_ids]
+        for sreq in sreqs:
+            srun_ids = sreq.sequencing_run_ids
+            sruns = [models.SequencingRun(s) for s in srun_ids]
+            for run in sruns:
+                storage_loc_id = run.storage_location_id
+                sres_ids = run.sequencing_result_ids
+        

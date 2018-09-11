@@ -511,14 +511,18 @@ class Model(metaclass=Meta):
 class Address(Model):
     MODEL_ABBR = "AD"
 
+
 class Antibody(Model):
     MODEL_ABBR = "AB"
+
 
 class AntibodyPurification(Model):
     MODEL_ABBR = "AP"
 
+
 class Barcode(Model):
     MODEL_ABBR = "BC"
+
 
 class Biosample(Model):
     MODEL_ABBR = "B"
@@ -536,8 +540,10 @@ class Biosample(Model):
     fkey_map["pooled_from_biosamples"] = "Biosample"
     fkey_map["treatment_ids"] = "Treatment"
 
+
 class BiosampleOntology(Model):
     MODEL_ABBR = "BO"
+
 
 class BiosampleReplicate(Model):
     MODEL_ABBR = "BR"
@@ -547,11 +553,14 @@ class BiosampleReplicate(Model):
     fkey_map["document_ids"] = "Document"
     fkey_map["user_id"] = "User"
 
+
 class BiosampleTermName(Model):
     MODEL_ABBR = "BTN"
 
+
 class BiosampleType(Model):
     MODEL_ABBR = "BTY"
+
 
 class ChipseqExperiment(Model):
     MODEL_ABBR = "CS"
@@ -563,20 +572,34 @@ class ChipseqExperiment(Model):
     fkey_map["user_id"] = "User"
     fkey_map["wild_type_input_id"] = "BiosampleReplicate"
 
+
+class DataStorage(Model):
+    MODEL_ABBR = "DS"
+
+
+class DataStorageProvider(Model):
+    MODEL_ABBR = "DSP"
+
+
 class Document(Model):
     MODEL_ABBR = "DOC"
+
 
 class DocumentType(Model):
     MODEL_ABBR = "DOCTY"
 
+
 class Unit(Model):
     MODEL_ABBR = "UN"
+
 
 class ConstructTag(Model):
     MODEL_ABBR = "CT"
 
+
 class CrisprConstruct(Model):
     MODEL_ABBR = "CC"
+
 
 class CrisprModification(Model):
     MODEL_ABBR = "CRISPR"
@@ -605,8 +628,10 @@ class CrisprModification(Model):
 class Donor(Model):
     MODEL_ABBR = "DON"
 
+
 class DonorConstruct(Model):
     MODEL_ABBR = "DONC"
+
 
 class Document(Model):
     MODEL_ABBR = "DOC"
@@ -618,6 +643,7 @@ class Document(Model):
         res.raise_for_status()
         data = base64.b64decode(res.json()["data"])
         return data
+
 
 class Library(Model):
     MODEL_ABBR = "L"
@@ -638,6 +664,7 @@ class Library(Model):
     # has_many
     fkey_map["document_ids"] = "Document"
 
+
 class LibraryFragmentationMethod(Model):
     MODEL_ABBR = "LFM"
 
@@ -645,12 +672,26 @@ class LibraryFragmentationMethod(Model):
 class NucleicAcidTerm(Model):
     MODEL_ABBR = "NAT"
 
+
 class PairedBarcode(Model):
     MODEL_ABBR = "PBC"
     
 
 class Plate(Model):
     MODEL_ABBR = "PL"
+
+
+class SequencingRequest(Model):
+    MODEL_ABBR = "SREQ"
+
+
+class SequencingRun(Model):
+    MODEL_ABBR = "SRUN"
+
+
+class SequencingResult(Model):
+    MODEL_ABBR = "SRES"
+
 
 class Shipping(Model):
     MODEL_ABBR = "SH"
@@ -670,7 +711,7 @@ class SingleCellSorting(Model):
     fkey_map["sorting_biosample_id"] = "Biosample"
     fkey_map["starting_biosample"] = "Biosample"
     fkey_map["user_id"] = "User"
-    
+
 
 class Target(Model):
     MODEL_ABBR = "TRG"
@@ -680,11 +721,14 @@ class Target(Model):
     fkey_map["crispr_construct_ids"] = "CrisprConstruct"
     fkey_map["donor_construct_ids"] = "DonorConstruct"
 
+
 class Treatment(Model):
     MODEL_ABBR = "TRT"
 
+
 class TreatmentTermName(Model):
     MODEL_ABBR = "TTN"
+
 
 class User(Model):
 
@@ -745,6 +789,7 @@ class User(Model):
 
 class Vendor(Model):
     MODEL_ABBR = "V"
+
 
 class Well(Model):
     MODEL_ABBR = "WELL"
