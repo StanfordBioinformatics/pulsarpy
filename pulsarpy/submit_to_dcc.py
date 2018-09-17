@@ -27,6 +27,13 @@ import pdb
 class UpstreamNotSet(Exception):
     pass
 
+class NoFastqFile(Exception):
+    """
+    Raised in Submit.post_fastq_file() when submitting either a R1 FASTQ file or a R2 FASTQ file,
+    and the filepath isn't set in the corresponding SequencingResult record in Pulsar.
+    """
+    pass
+
 
 class Submit():
     UPSTREAM_ATTR = "upstream_identifier"
@@ -430,6 +437,9 @@ class Submit():
 
     def post_replicate(self, library_upstream, patch=False):
         """
+        Submits a replicated record, linked to the specified library. The associated experiment
+        record will be determined via the method :func:`pulsarpy.utils.get_exp_of_biosample`.
+
         Todo: Check what value to use for technical_replicate_number. 
         Args:
             library_upstream - The identifier of a Library record on the ENCODE Portal, which is
@@ -473,10 +483,34 @@ class Submit():
         return res
         #return payload
 
-    def post_file(self, pulsar_sres_id, pulsar patch=False):
+    def post_fasta_file(self, pulsar_sres_id, read_num, patch=False):
         """
         Creates a file record on the ENCODE Portal. 
+
+        Args:
+            pulsar_sres_id: A SequencingResult record in Pulsar. 
+            read_num: `int`. being either 1 or 2. Use 1 for the forwrard reads FASTQ file, and 2
+                for the reverse reads FASTQ file. A SequencingResult in Pulsar stores the location
+                of both files (if paired-end sequening).
         """
+        sres = models.SequencingResult(pulsar_sres_id)
+        if read_num == 1:
+            file_name = sres.read1_uri
+        elif read_num == 2:
+            file_name = sres.read2_uri
+        if not file_name:
+            raise NoFastqFile("SequencingResult '{}' for R{read_num} does not have a FASTQ file path set.".format(pulsar_sres_id, read_num))
+        aliases = []
+        aliases.extend([rec.abbrev_id(), file_name)
+        srun = models.Sequencingrun(sres.sequencing_run_id)
+        storage_location = models.FileReference(srun.storage_location_id)
+        storage_path = storage_location.file_path
+        data_storage = models.DataStorage(storage_location.data_storage_id)
+        full_path = os.path.join(data_storage.folder_base_path, storage_path, file_name)
+        payload = {}
+        payload["aliases"] = aliases
+        payload[self.UPSTREAM_ATTR] = self.get_upstream_id(rec)
+        
 
     def get_barcode_details_for_ssc(self, ssc_id):
         """
@@ -540,14 +574,17 @@ class Submit():
             upstream = self.post_document(rec_id=d)
             doc_upstreams.append(upstream)
         payload["documents"] = doc_upstreams
+        exp_upstream = self.post(payload=payload, dcc_profile="experiment", pulsar_model="SingleCellSorting", pulsar_rec_id=rec_id)
 
         # Submit biosample
         self.post_biosample(rec_id=sorting_biosample.id, patch=patch)
-        # Submit library_prototype (linked to sorting_biosample)
+        # Submit library_prototype (which is linked to sorting_biosample when it is created)
         library_prototype_id = rec.library_prototype_id
         library_upstream = self.post_library(rec_id=library_prototype_id, patch=patch)
-        # Submit replicate
+        # Submit replicate.
+        # The experiment will be determined via inspection of associated biosample. 
         replicate_upstream = self.post_replicate(library_upstream=library_upstream, patch=patch)
+        # A SingleCellSorting has many SequencingRequests through the Plates association.
         sreq_ids = rec.sequencing_request_ids 
         sreqs = [models.SequencingRequest(s) for s in sreq_ids]
         for sreq in sreqs:
@@ -556,4 +593,5 @@ class Submit():
             for run in sruns:
                 storage_loc_id = run.storage_location_id
                 sres_ids = run.sequencing_result_ids
+                # Submit a file record
         

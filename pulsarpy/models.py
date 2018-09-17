@@ -645,6 +645,10 @@ class Document(Model):
         return data
 
 
+class FileReference(Model):
+    MODEL_ABBR = "FR"
+
+
 class Library(Model):
     MODEL_ABBR = "L"
     fkey_map = {}
