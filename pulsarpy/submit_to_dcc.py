@@ -451,7 +451,7 @@ class Submit():
         #  -technical_replicate_number
 
         #dcc_lib = self.ENC_CONN.get(ignore404=False, rec_ids=dcc_library_id)       
-        lib = models.Library(upstream=library_upstream})
+        lib = models.Library(upstream=library_upstream)
         biosample_id = lib.biosample_id
         biosample = models.Biosample(biosample_id)
         payload = {}
@@ -483,7 +483,7 @@ class Submit():
         return res
         #return payload
 
-    def post_fasta_file(self, pulsar_sres_id, read_num, patch=False):
+    def post_fastq_file(self, pulsar_sres_id, read_num, patch=False):
         """
         Creates a file record on the ENCODE Portal. 
 
@@ -501,7 +501,7 @@ class Submit():
         if not file_name:
             raise NoFastqFile("SequencingResult '{}' for R{read_num} does not have a FASTQ file path set.".format(pulsar_sres_id, read_num))
         aliases = []
-        aliases.extend([rec.abbrev_id(), file_name)
+        aliases.extend([rec.abbrev_id(), file_name])
         srun = models.Sequencingrun(sres.sequencing_run_id)
         storage_location = models.FileReference(srun.storage_location_id)
         storage_path = storage_location.file_path

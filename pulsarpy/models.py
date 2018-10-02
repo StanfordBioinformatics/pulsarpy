@@ -439,9 +439,6 @@ class Model(metaclass=Meta):
                continue
             if key.endswith("_id"):
                 model = getattr(THIS_MODULE, cls.fkey_map[key])
-                model_id_abbr = cls.MODEL_ABBR + "-"
-                if val.startswith(model_id_abbr):
-                   val = val.split(model_id_abbr)[-1] 
                 rec_id = cls.replace_name_with_id(model=model, name=val)
                 payload[key] = rec_id
             elif key.endswith("_ids"):
@@ -684,9 +681,20 @@ class PairedBarcode(Model):
 class Plate(Model):
     MODEL_ABBR = "PL"
 
+class SequencingCenter(Model):
+    MODEL_ABBR = "SC"
 
 class SequencingRequest(Model):
     MODEL_ABBR = "SREQ"
+    fkey_map = {}
+    fkey_map["concentration_unit_id"] = "Unit"
+    fkey_map["sequencing_platform_id"] = "SequencingPlatform"
+    fkey_map["sequencing_center_id"] = "SequencingCenter"
+    fkey_map["submitted_by_id"] = "User"
+    
+
+class SequencingPlatform(Model):
+    MODEL_ABBR = "SP"
 
 
 class SequencingRun(Model):
