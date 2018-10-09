@@ -401,6 +401,7 @@ class Model(metaclass=Meta):
         """
         if not isinstance(payload, dict):
             raise ValueError("The 'payload' parameter must be provided a dictionary object.")
+        payload = self.__class__.set_id_in_fkeys(payload)
         if append_to_arrays:
             for key in payload:
                 val = payload[key]
@@ -534,7 +535,7 @@ class Biosample(Model):
     fkey_map["transfected_by_id"] = "User"
     fkey_map["vendor_id"] = "Vendor"
     fkey_map["document_ids"] = "Document"
-    fkey_map["pooled_from_biosamples"] = "Biosample"
+    fkey_map["pooled_from_biosample_ids"] = "Biosample"
     fkey_map["treatment_ids"] = "Treatment"
 
 
@@ -558,6 +559,20 @@ class BiosampleTermName(Model):
 class BiosampleType(Model):
     MODEL_ABBR = "BTY"
 
+class ChipBatch(Model):
+    MODEL_ABBR = "CB"
+    fkey_map = {}
+    fkey_map["user_id"] = "User"
+    fkey_map["analyst_id"] = "User"
+    fkey_map["chip_batch_item_ids"] = "ChipBatch"
+
+class ChipBatchItem(Model):
+    MODEL_ABBR = "CBI"
+    fkey_map = {}
+    fkey_map["user_id"] = "User"
+    fkey_map["biosample_id"] = "Biosample"
+    fkey_map["chip_batch_id"] = "ChipBatch"
+    fkey_map["concentration_unit_id"] = "Unit"
 
 class ChipseqExperiment(Model):
     MODEL_ABBR = "CS"
@@ -601,7 +616,7 @@ class CrisprConstruct(Model):
 class CrisprModification(Model):
     MODEL_ABBR = "CRISPR"
     fkey_map = {}
-    fkey_map["biosample_id"] = "Biosample"
+    fkey_map["biosample_ids"] = "Biosample"
     fkey_map["crispr_construct_ids"] = "CrisprConstruct"
     fkey_map["document_ids"] = "Document"
     fkey_map["donor_construct_id"] = "DonorConstruct"
@@ -652,12 +667,13 @@ class Library(Model):
     # belongs_to/ has_one
     fkey_map["barcode_id"] = "Barcode"
     fkey_map["biosample_id"] = "Biosample"
-    fkey_map["concentration_unit_id"] = "ConcentrationUnit"
+    fkey_map["concentration_unit_id"] = "Unit"
     fkey_map["from_prototype_id"] = "Library"
     fkey_map["library_fragmentation_method_id"] = "LibraryFragmentationMethod"
     fkey_map["nucleic_acid_term_id"] = "NucleicAcidTerm"
     fkey_map["paired_barcode_id"] = "PairedBarcode"
     fkey_map["sequencing_library_prep_kit_id"] = "SequencingLibraryPrepKit"
+    fkey_map["sequencing_request_ids"] = "SequencingRequest"
     fkey_map["single_cell_sorting_id"] = "SingleCellSorting"
     fkey_map["user_id"] = "User"
     fkey_map["vendor_id"] = "Vendor"
@@ -683,6 +699,9 @@ class Plate(Model):
 
 class SequencingCenter(Model):
     MODEL_ABBR = "SC"
+
+class SequencingLibraryPrepKit(Model):
+    MODEL_ABBR = "SLPK"
 
 class SequencingRequest(Model):
     MODEL_ABBR = "SREQ"
