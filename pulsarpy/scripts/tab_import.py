@@ -33,6 +33,10 @@ def get_parser():
       Presence of this option means to PATCH instead of POST. The input file must contain a column
       by the name of {} to designate the existing record to PATCH.  You can use a record's primary
       ID or name as the identifier.""".format(RECORD_ID_FIELD))
+    parser.add_argument("--no-append", action="store_true", help="""
+      This option only has meaning when the --patch option is also specified. It's presence indicates
+      to not extend array values with the content to be patched when dealing with array data types. 
+      Thus, if you don't want to overwrite the existing value for arrays, then skip this option.""")
  
     return parser
 
@@ -43,6 +47,9 @@ def main():
     infile = args.infile
     model = getattr(models, args.model)
     patch = args.patch
+    append_to_arrays = True
+    if args.no_append:
+        append_to_arrays = False
     fh = open(infile)
     header = fh.readline().strip("\n").split("\t")
     if patch:
@@ -74,7 +81,7 @@ def main():
             rec_id = payload[RECORD_ID_FIELD]
             payload.pop(RECORD_ID_FIELD)
             rec = model(rec_id)
-            res = rec.patch(payload)
+            res = rec.patch(payload=payload, append_to_arrays=append_to_arrays)
         else:
             res = model.post(payload)
         print("Success: ID {}".format(res["id"]))
