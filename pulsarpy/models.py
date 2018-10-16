@@ -21,9 +21,12 @@ import json
 import logging
 import os
 import requests
+import urllib3
 import pdb
 
 import pulsarpy as p
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 THIS_MODULE = import_module(__name__)
 
@@ -66,6 +69,11 @@ THIS_MODULE = import_module(__name__)
 #    payload = {'name': 'test_tag_ampc', 'description': "C'est bcp + qu'un simple ..."}
 #    r = requests.post(url=url, headers=HEADERS, verify=False, data=json.dumps({"construct_tag": {"name": "nom"}}))
 
+
+class RecordNotUnique(Exception):
+    """
+    Raised when posting a record and the Rails server returns with the exception ActiveRecord::RecordNotUnique.
+    """
 
 def remove_model_prefix(uid):
     """
@@ -463,6 +471,7 @@ class Model(metaclass=Meta):
 
         Raises:
             `Requests.exceptions.HTTPError`: The status code is not ok.
+            `RecordNotUnique`: The Rails server returned the exception ActiveRecord::RecordNotUnique.
         """
         if not isinstance(payload, dict):
             raise ValueError("The 'payload' parameter must be provided a dictionary object.")
@@ -474,6 +483,11 @@ class Model(metaclass=Meta):
         cls.write_response_html_to_file(res,"bob.html")
         if not res.ok:
             cls.log_error(res.text)
+            res_json = res.json()
+            if "exception" in res_json:
+                exc_type = res_json["exception"]
+                if exc_type == "ActiveRecord::RecordNotUnique":
+                    raise RecordNotUnique()
         res.raise_for_status()
         res = res.json()
         cls.log_post(res)
@@ -542,16 +556,6 @@ class Biosample(Model):
 class BiosampleOntology(Model):
     MODEL_ABBR = "BO"
 
-
-class BiosampleReplicate(Model):
-    MODEL_ABBR = "BR"
-    fkey_map = {}
-    fkey_map["biosample_id"] = "Biosample"
-    fkey_map["chipseq_experiment_id"] = "ChipseqExperiment"
-    fkey_map["document_ids"] = "Document"
-    fkey_map["user_id"] = "User"
-
-
 class BiosampleTermName(Model):
     MODEL_ABBR = "BTN"
 
@@ -578,11 +582,12 @@ class ChipseqExperiment(Model):
     MODEL_ABBR = "CS"
     fkey_map = {}
     fkey_map["document_ids"] = "Document"
-    fkey_map["control_biosample_replicate_ids"] = "BiosampleReplicate"
-    fkey_map["experiment_biosample_replicate_ids"] = "BiosampleReplicate"
+    fkey_map["control_replicate_ids"] = "Biosample"
+    fkey_map["replicate_ids"] = "Biosample"
+    fkey_map["starting_biosample_id"] = "Biosample"
     fkey_map["target_id"] = "Target"
     fkey_map["user_id"] = "User"
-    fkey_map["wild_type_input_id"] = "BiosampleReplicate"
+    fkey_map["wild_type_control_id"] = "Biosample"
 
 
 class DataStorage(Model):

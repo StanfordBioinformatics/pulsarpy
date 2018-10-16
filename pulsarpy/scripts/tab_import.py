@@ -37,6 +37,9 @@ def get_parser():
       This option only has meaning when the --patch option is also specified. It's presence indicates
       to not extend array values with the content to be patched when dealing with array data types. 
       Thus, if you don't want to overwrite the existing value for arrays, then skip this option.""")
+    parser.add_argument("--skip-dups", action="store_true", help="""
+      If an attempt to POST a duplicate record is made, the server will respond with a ActiveRecord::RecordNotUnique
+      exception. Including this flag indicates to catch this exception and skip on to the next record to POST.""")
  
     return parser
 
@@ -44,6 +47,7 @@ def get_parser():
 def main():
     parser = get_parser()
     args = parser.parse_args()
+    skip_dups = args.skip_dups
     infile = args.infile
     model = getattr(models, args.model)
     patch = args.patch
@@ -83,7 +87,13 @@ def main():
             rec = model(rec_id)
             res = rec.patch(payload=payload, append_to_arrays=append_to_arrays)
         else:
-            res = model.post(payload)
+            try:
+                res = model.post(payload)
+            except models.RecordNotUnique:
+                if skip_dups:
+                    continue
+                else:
+                    raise
         print("Success: ID {}".format(res["id"]))
 
 if __name__ == "__main__":
