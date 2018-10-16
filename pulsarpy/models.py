@@ -152,6 +152,10 @@ class Model(metaclass=Meta):
         1) PULSAR_API_URL
         2) PULSAR_TOKEN
     """
+    # Most models have an attribute alled upstream_identifier that is used to store the value of the
+    # record in an "upstream" database that is submitted to, i.e. the ENCODE Portal. Not all models
+    # have this attribute since not all are used for submission to an upstream portal. 
+    UPSTREAM_ATTR = "upstream_identifier"
     MODEL_ABBR = ""  # subclasses define
     HEADERS = {'accept': 'application/json', 'content-type': 'application/json', 'Authorization': 'Token token={}'.format(p.API_TOKEN)}
 
@@ -300,8 +304,21 @@ class Model(metaclass=Meta):
                 payload[key] = val 
         return payload
 
+    def get_upstream(self):
+        return self.attrs.get(Model.UPSTREAM_ATTR)
+
     def abbrev_id(self):
-        return self.MODEL_ABBR + "-" + str(self.id)
+        """
+        This method is called when posting to the ENCODE Portal to grab an alias for the record
+        being submitted. The alias here is composed of the record ID in Pulsar (i.e. B-1 for the Biosample
+        with ID 1). However, the record ID is prefexed with a 'p' to designate that this record was
+        submitted from Pulsar. This is used to generate a unique alias considering that we used to
+        uses a different LIMS (Syapse) to submit records.  Many of the models in Syapse used the same 
+        model prefix as is used in Pulsar, i.e. (B)Biosample and (L)Library. Thus, w/o the 'p' prefix,
+        the same alias could be generated in Pulsar as a previous one used in Syapse.
+        """
+        pulsar_lims_prefix = "p"
+        return pulsar_lims_prefix +  self.MODEL_ABBR + "-" + str(self.id)
 
     def delete(self):
         """Deletes the record.

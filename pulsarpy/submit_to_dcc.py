@@ -7,11 +7,20 @@
 ###
 
 """
-Required Environment Variables
-  1) Those that are required in the pulsarpy.models module to submit data to the ENCODE Portal::
-     -PULSAR_API_URL and PULSAR_TOKEN
-  2) Those that are required in the encode_utils.connection module to read data out of Pulsar:
-     -DCC_API_KEY and DCC_SECRET_KEY
+Required environment variables
+  1) Those that are required in the pulsarpy.models module for connecting to Pulsar LIMS:
+     -PULSAR_API_URL
+     -PULSAR_TOKEN
+  2) Those that are required in the encode_utils.connection module to connect to the ENCODE Portal:
+     -DCC_API_KEY
+     -DCC_SECRET_KEY
+
+Optional environment variables:
+  1) DCC_MODE_ - Specifies which ENCODE Portal host to connect to. If not set, then must be provided
+     when instantiating the Submit() class.
+
+..  _DCC_MODE: https://encode-utils.readthedocs.io/en/latest/connection.html#encode_utils.connection.Connection.dcc_mode
+
 """
 
 import base64
@@ -36,7 +45,6 @@ class NoFastqFile(Exception):
 
 
 class Submit():
-    UPSTREAM_ATTR = "upstream_identifier"
 
     def __init__(self, dcc_mode=None):
         if not dcc_mode:
@@ -59,68 +67,34 @@ class Submit():
                 payload.pop(i)
         return payload
 
-    def clean_name(self, name):
+    def sanitize_prop_val(self, txt):
         """
-        Removes characters from a string that are not allowed when submitting to certain properties,
-        such as aliases. Some characters are replaced with allowed
-        character equivalents rather than removed.
+        Replaces characters that can be problematic in property values on the ENCODE Portal. 
+        For example, the '/' character in an alias is a problem since the alias is an identifying property
+        that can be used in a URL to view the record. In this case, the '/' will be interpreted as a
+        path separator. 
 
-        Examples:  
-            "hi #1" -> "hi 1"
-            "6/24/18" -> "6-24-18" 
+        Characters that get replaced: currently, just '/' with '-'. 
 
         Args:
-            name: `str`. The value to clean.
+            txt: `str`. The value to clean.
 
         Returns:
             `str`. The cleaned value that is submission acceptable. 
         """
-        return name.replace("#","").replace("/","-")
+        return txt.replace("/","-")
                   
 
-    def patch(self, payload, raise_403=True, extend_array_values=False):
-        """Updates a record in the ENCODE Portal based on its state in Pulsar. 
-    
-        Args:
-            payload: `dict`. containing the attribute key and value pairs to patch.
-            raise_403: `bool`. `True` means to raise a ``requests.exceptions.HTTPError`` if a 403 status
-                (forbidden) is returned.
-                If set to `False` and there still is a 403 return status, then the object you were
-                trying to PATCH will be fetched from the Portal in JSON format as this function's
-                return value.
-            extend_array_values: `bool`. Only affects keys with array values. `True` (default) means to
-                extend the corresponding value on the Portal with what's specified in the payload.
-                `False` means to replace the value on the Portal with what's in the payload.
-    
-        Returns:
-            `dict`. Will be empty if the record to PATCH wasn't found on the ENCODE Portal or if the
-            connection object to the ENCODE Portal has the dry-run feature turned on. If the PATCH
-            operation returns a 403 Forbidden status and the ignore403 argument is set, then the
-            record as it presently exists on the Portal will be returned.
+    #def patch(self, payload, raise_403=True, extend_array_values=False):
+         # Just use self.ENC_CONN.patch() directly.
 
-        Raises:
-            pulsarpy.submit_to_dcc.UpstreamNotSet: The Pulsar record's 'upstream_identifier' property
-              isn't set. 
-            
-        """
-        upstream = payload.pop(self.UPSTREAM_ATTR)
-        if not upstream:
-            raise UpstreamNotSet("Payload '{}' has no upstream value set.".format(payload))
-        payload[self.ENC_CONN.ENCID_KEY] = upstream
-        res = self.ENC_CONN.patch(payload=payload, raise_403=raise_403, extend_array_values=extend_array_values)
-        # res will be {} if record doesn't exist on the ENCODE Portal.
-        if not res:
-            print("Warning: Could not PATCH '{}' as its upstream identifier was not found on the ENCODE Portal.".format(upstream))
-        return res
-    
+
     def post(self, payload, dcc_profile, pulsar_model, pulsar_rec_id):
         """
-        POSTS a record from Pulsar to the ENCODE Portal and updates the Pulsar record's
-        'upstream_identifier' attribute to reference the new object on the Portal (but only if 
-        in production mode where `self.dcc_mode = "prod"`). Before attempting
-        a POST, first checks whether the record in Pulsar already has the upstream value set, in
-        which case no POST will be made and the upstream value will be returned. In order for this 
-        mandatory check to work, the provided payload must include a key for ``self.UPSTREAM_ATTR``.
+        A wrapper over `encode_utils.connection.Connection.post()`. Adds an aliases to the payload
+        being the records record ID.  It sets the profile key in the
+        payload and also encapsulates logic about setting the upstream_identifier of the Pulsar
+        record.
     
         Args:
             payload: `dict`. The new record attributes to submit.
@@ -131,20 +105,25 @@ class Submit():
                 upstream_identifier attribute after a successful POST to the ENCODE Portal.
             pulsar_rec_id: `str`. The identifier of the Pulsar record to POST to the DCC.
         Returns:
-            `str`: The identifier of the new record on the ENCODE Portal, or the existing
+            `str`: The upstream identifier for the new record on the ENCODE Portal, or the existing
             record identifier if the record already exists. The identifier of either the new record 
             or existing record on the ENCODE Portal is determined to be the 'accession' if that property is present, 
             otherwise it's the first alias if the 'aliases' property is present, otherwise its 
-            the 'uuid' property.
+            the 'uuid' property. 
         """
-        # Make sure the record's UPSTREAM_ATTR isn't set, which would mean that it was already POSTED
-        upstream = ""
-        if self.UPSTREAM_ATTR in payload:
-            upstream = payload.pop(self.UPSTREAM_ATTR)
-        if upstream:
-            print("Will not POST '{}' since it was already submitted as '{}'.".format(pulsar_rec_id, upstream))
-            return upstream
         payload[self.ENC_CONN.PROFILE_KEY] = dcc_profile
+        rec = pulsar_model.get(pulsar_rec_id)
+        aliases = payload.get(aliases) or []
+        aliases.append(rec.abbrev_id())
+        aliases = list(set(aliases))
+        # Add value of 'name' property as an alias, if this property exists for the given model.
+        try:
+            name = self.sanitize_prop_val(rec["name"])
+            if name:
+                aliases.append(name)
+        except KeyError:
+            pass
+        payload["aliaes"] = aliases
     
         # `dict`. The POST response if the record didn't yet exist on the ENCODE Portal, or the
         # record itself if it does already exist. Note that the dict. will be empty if the connection
@@ -167,27 +146,13 @@ class Submit():
     
     def post_crispr_modification(self, rec_id, patch=False):
         rec = models.CrisprModification(rec_id)
-        aliases = []
-        aliases.append(rec.abbrev_id())
-        aliases.append(self.clean_name(rec["name"]))
         payload = {}
-        payload["aliases"] = aliases
         res = self.post(payload=payload, dcc_profile="genetic_modification", pulsar_model=models.CrisprModification, pulsar_rec_id=rec_id)
         return res
     
-    def get_upstream_id(self, rec):
-        return rec.attrs.get(self.UPSTREAM_ATTR)
-    
     def post_document(self, rec_id, patch=False):
         rec = models.Document(rec_id)
-        aliases = []
-        aliases.append(rec.abbrev_id())
-        name = rec.name
-        if name:
-            aliases.append(self.clean_name(name))
         payload = {}
-        payload["aliases"] = aliases
-        payload[self.UPSTREAM_ATTR] = self.get_upstream_id(rec)
         payload["description"] = rec.description
         doc_type = models.DocumentType(rec.document_type_id)
         payload["document_type"] = doc_type.name
@@ -210,14 +175,7 @@ class Submit():
 
     def post_treatment(self, rec_id, patch=False):
         rec = models.Treatment(rec_id)
-        aliases = []
-        aliases.append(rec.abbrev_id())
-        name = rec.name
-        if name:
-            aliases.append(self.clean_name(name))
         payload = {}
-        payload["aliases"] = aliases
-        payload[self.UPSTREAM_ATTR] = self.get_upstream_id(rec) 
         conc = rec.concentration
         if conc:
             payload["amount"] = conc
@@ -240,7 +198,7 @@ class Submit():
         docs = [models.Document(d) for d in doc_ids]
         doc_upstreams = []
         for doc in docs:
-            doc_upstream = self.get_upstream_id(doc) 
+            doc_upstream = rec.get_upstream() 
             if not doc_upstream:
                 doc_upstream = post_document(doc)
             doc_upstreams.append(doc_upstream)
@@ -263,13 +221,7 @@ class Submit():
         rec = models.Biosample(rec_id)
         # The alias lab prefixes will be set in the encode_utils package if the DCC_LAB environment
         # variable is set.
-        aliases = []
-        aliases.append(rec.abbrev_id())
-        name = rec.name
-        if name: 
-          aliases.append(self.clean_name(name))
         payload = {}
-        payload["aliases"] = aliases
         btn = models.BiosampleTermName(rec.biosample_term_name_id)
         payload["biosample_term_name"] = btn.name.lower() #Portal requires lower-case
         payload["biosample_term_id"] = btn.accession
@@ -311,7 +263,7 @@ class Submit():
         cm_id = rec.crispr_modification_id
         if cm_id:
             cm = models.CrisprModification(cm_id)
-            cm_upstream = self.get_upstream_id(cm) 
+            cm_upstream = cm.get_upstream() 
             if not cm_upstream:
                 cm_upstream = self.post_crispr_modification(cm_id)
             payload["genetic_modifications"] = cm_upstream
@@ -321,14 +273,14 @@ class Submit():
             docs = [models.Document(d) for d in doc_ids]
             doc_upstreams = []
             for doc in doc:
-                doc_upstream = self.get_upstream_id(doc) 
+                doc_upstream = doc.get_upstream() 
                 if not doc_upstream:
                     doc_upstream = self.post_document(doc.id)
                 doc_upstreams.append(doc_upstream)
             payload["documents"] = doc_upstreams
     
         donor = models.Donor(rec.donor_id)
-        donor_upstream = self.get_upstream_id(donor) 
+        donor_upstream = donor.get_upstream() 
         if not donor_upstream:
             raise Exception("Donor '{}' of biosample '{}' does not have its upstream set. Donors must be registered with the DCC directly.".format(donor.id, rec_id))
         payload["donor"] = donor_upstream
@@ -336,7 +288,7 @@ class Submit():
         part_of_biosample_id = rec.part_of_id
         if part_of_biosample_id:
             part_of_biosample = models.Biosample(part_of_biosample_id)
-            pob_upstream = self.get_upstream_id(part_of_biosample) 
+            pob_upstream = part_of_biosample.get_upstream() 
             if not pob_upstream:
                 pob_upstream = self.post_biosample(part_of_biosample_id)
             payload["part_of"] = pob_upstream
@@ -346,15 +298,15 @@ class Submit():
             pooled_from_biosamples = [models.Biosample(b) for p in pooled_from_biosample_ids]
             payload["pooled_from"] = []
             for p in pooled_from_biosamples:
-                p_upstream = self.get_upstream_id(p) 
+                p_upstream = p.get_upstream() 
                 if not p_upstream:
                     p_upstream = self.post_biosample(p.id)
                 payload["pooled_from"].append(p_upstream)
     
         vendor = models.Vendor(rec.vendor_id)
-        vendor_upstream = self.get_upstream_id(vendor) 
+        vendor_upstream = vendor.get_upstream() 
         if not vendor_upstream:
-            raise Exception("Biosample '{}' has a vendor without an upstream set: Vendors are requied to be registered by the DCC personel, and Pulsar needs to have the Vendor record's '{}' attribute set.".format(rec_id, self.UPSTREAM_ATTR))
+            raise Exception("Biosample '{}' has a vendor without an upstream set: Vendors are requied to be registered by the DCC personel, and Pulsar needs to have the Vendor record's '{}' attribute set.".format(rec_id, models.Model.UPSTREAM_ATTR))
         payload["source"] = vendor_upstream
     
         treatment_ids = rec.treatment_ids
@@ -363,7 +315,7 @@ class Submit():
             treatments = [models.Treatment(t) for t in treatment_ids]
             treat_upstreams = []
             for treat in treatments:
-                treat_upstream = self.get_upstream_id(treat)
+                treat_upstream = treat.get_upstream()
                 if not treat_upstream:
                     treat_upstream = self.post_treatment(treat.id)
                 treat_upstreams.append(treat_upstream)
@@ -383,18 +335,11 @@ class Submit():
         Args:
         """
         rec = models.Library(rec_id)
-        aliases = []
-        aliases.append(rec.abbrev_id())
-        name = rec.name
-        if name: 
-          aliases.append(self.clean_name(name))
         payload = {}
-        payload["aliases"] = aliases
-        payload[self.UPSTREAM_ATTR] = self.get_upstream_id(rec)
         biosample = models.Biosample(rec.biosample_id)
         # If this Library record is a SingleCellSorting.library_prototype, then the Biosample it will
         # be linked to is the SingleCellSorting.sorting_biosample.
-        biosample_upstream = self.get_upstream_id(biosample) 
+        biosample_upstream = biosample.get_upstream() 
         if not biosample_upstream:
             biosample_upstream = self.post_biosample(rec_id=rec.biosample_id, patch=False)
         payload["biosample"] = biosample_upstream
@@ -402,7 +347,7 @@ class Submit():
         docs = [models.Document(d) for d in doc_ids]
         doc_upstreams = []
         for d in docs:
-            upstream = self.get_upstream_id(d) 
+            upstream = d.get_upstream() 
             if not upstream:
                 upstream = self.post_document(rec_id=d.id, patch=False)
                 doc_upstreams.append(upstream)
@@ -419,7 +364,8 @@ class Submit():
         payload["strand_specificity"] = rec.strand_specific
         vendor_id = rec.vendor_id
         if vendor_id:
-            vendor_upstream = self.get_upstream_id(vendor_id)
+            vendor = models.Vendor(vendor_id)
+            vendor_upstream = vendor.get_upstream()
             if not vendor_upstream:
                 vendor_upstream = self.post_vendor(rec_id=vendor_id)
             payload["source"] = vendor_upstream
@@ -501,7 +447,7 @@ class Submit():
         if not file_name:
             raise NoFastqFile("SequencingResult '{}' for R{read_num} does not have a FASTQ file path set.".format(pulsar_sres_id, read_num))
         aliases = []
-        aliases.extend([rec.abbrev_id(), file_name])
+        aliases.append(file_name)
         srun = models.Sequencingrun(sres.sequencing_run_id)
         storage_location = models.FileReference(srun.storage_location_id)
         storage_path = storage_location.file_path
@@ -509,7 +455,6 @@ class Submit():
         full_path = os.path.join(data_storage.folder_base_path, storage_path, file_name)
         payload = {}
         payload["aliases"] = aliases
-        payload[self.UPSTREAM_ATTR] = self.get_upstream_id(rec)
         
 
     def get_barcode_details_for_ssc(self, ssc_id):
@@ -551,16 +496,10 @@ class Submit():
 
     def post_single_cell_sorting(self, rec_id, patch=False):
         rec = models.SingleCellSorting(rec_id)
-        aliases = []
-        aliases.append(rec.abbrev_id())
-        name = rec.name
-        if name: 
-          aliases.append(self.clean_name(name))
         sorting_biosample_id = rec.sorting_biosample_id
         sorting_biosample = models.Biosample(sorting_biosample_id)
         payload = {}
         # Set the explicitly required properties first:
-        payload["aliases"] = aliases
         payload["assay_term_name"] = "single-cell ATAC-seq"
         payload["biosample_type"] = sorting_biosample["biosample_type"]["name"]
         payload["experiment_classification"] = "functional genomics"
