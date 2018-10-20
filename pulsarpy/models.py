@@ -70,10 +70,17 @@ THIS_MODULE = import_module(__name__)
 #    r = requests.post(url=url, headers=HEADERS, verify=False, data=json.dumps({"construct_tag": {"name": "nom"}}))
 
 
+class RecordNotFound(Exception):
+    """"
+    Raised when looking up a record by name, id, etc. and it isn't found on the server.
+    """
+
+
 class RecordNotUnique(Exception):
     """
     Raised when posting a record and the Rails server returns with the exception ActiveRecord::RecordNotUnique.
     """
+
 
 def remove_model_prefix(uid):
     """
@@ -260,6 +267,8 @@ class Model(metaclass=Meta):
         except ValueError:
             #Not an int, so maybe a name. Look up Biosample record
             b = model.find_by({"name": name})
+            if not b:
+                raise RecordNotFound("Name '{}' for model '{}' not found.".format(name, model.__class__.__name__))
             return b["id"]
     
 

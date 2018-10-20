@@ -56,7 +56,10 @@ class Submit():
                 sys.exit(-1)                                                                        
         self.dcc_mode = dcc_mode
         self.ENC_CONN = euc.Connection(self.dcc_mode)
-    
+        #: When patching, there is the option to extend array properties or overwrite their values.
+        #: The default is to extend.
+        self.extend_arrays_when_patching = True
+
     def filter_standard_attrs(self, payload):
         attrs = ["created_at", "id", "owner_id", "updated_at", "user_id"]
         for i in attrs:
@@ -168,7 +171,7 @@ class Submit():
         attachment["href"] = href
         payload["attachment"] = attachment
         if patch:
-            res = self.patch(payload=payload)
+            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays_when_patching))
         else:
             res = self.post(payload=payload, dcc_profile="document", pulsar_model=models.Document, pulsar_rec_id=rec_id)
         return res
@@ -205,7 +208,7 @@ class Submit():
         payload["documents"] = doc_upstreams
         # Submit
         if patch:
-            res = self.patch(payload=payload)
+            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays_when_patching)
         else:
             res = self.post(payload=payload, dcc_profile="treatment", pulsar_model=models.Treatment, pulsar_rec_id=rec_id)
         return res
@@ -295,7 +298,7 @@ class Submit():
     
         pooled_from_biosample_ids = rec.pooled_from_biosample_ids
         if pooled_from_biosample_ids:
-            pooled_from_biosamples = [models.Biosample(b) for p in pooled_from_biosample_ids]
+            pooled_from_biosamples = [models.Biosample(p) for p in pooled_from_biosample_ids]
             payload["pooled_from"] = []
             for p in pooled_from_biosamples:
                 p_upstream = p.get_upstream() 
@@ -322,7 +325,7 @@ class Submit():
             payload["treatments"] = treat_upstreams
    
         if patch:  
-            res = self.patch(payload=payload)
+            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays_when_patching)
         else:
             res = self.post(payload=payload, dcc_profile="biosample", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
         return res
@@ -376,7 +379,7 @@ class Submit():
 
         # Submit payload
         if patch:  
-            res = self.patch(payload=payload)
+            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays_when_patching))
         else:
             res = self.post(payload=payload, dcc_profile="library", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
         return res
@@ -423,7 +426,7 @@ class Submit():
         payload["library"] = library_upstream
         # Submit payload
         if patch:  
-            res = self.patch(payload=payload)
+            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays_when_patching))
         else:
             res = self.post(payload=payload, dcc_profile="replicate", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
         return res
