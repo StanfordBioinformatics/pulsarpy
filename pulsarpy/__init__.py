@@ -25,13 +25,13 @@ HOST = urlparse(URL).hostname
 API_TOKEN = os.environ["PULSAR_TOKEN"] 
 
 #: The name of the debug ``logging`` instance.                                                         
-DEBUG_LOGGER_NAME = "debug"                                                                            
+DEBUG_LOGGER_NAME = "ppy_debug"                                                                            
 #: The name of the error ``logging`` instance created in the ``pulsarpy.models.Model`` class.
 #: and referenced elsewhere.                                                                           
-ERROR_LOGGER_NAME = "error"                                                                            
+ERROR_LOGGER_NAME = "ppy_error"                                                                            
 #: The name of the POST ``logging`` instance created in the ``pulsarpy.models.Model`` claass.
 #: and referenced elsewhere.                                                                           
-POST_LOGGER_NAME = "post"                                                                              
+POST_LOGGER_NAME = "ppy_post"                                                                              
                                                                                                        
 #: A ``logging`` instance that logs all messages sent to it to STDOUT.                                 
 debug_logger = logging.getLogger(DEBUG_LOGGER_NAME)                                                    

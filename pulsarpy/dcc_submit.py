@@ -55,7 +55,7 @@ class Submit():
                 print("ERROR: You must supply the `dcc_mode` argument or set the environment variable DCC_MODE.")
                 sys.exit(-1)                                                                        
         self.dcc_mode = dcc_mode
-        self.ENC_CONN = euc.Connection(self.dcc_mode)
+        self.ENC_CONN = euc.Connection(self.dcc_mode, submission=True)
         #: When patching, there is the option to extend array properties or overwrite their values.
         #: The default is to extend.
         self.extend_arrays = extend_arrays
