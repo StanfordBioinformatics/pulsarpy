@@ -46,7 +46,7 @@ class NoFastqFile(Exception):
 
 class Submit():
 
-    def __init__(self, dcc_mode=None):
+    def __init__(self, dcc_mode=None, extend_arrays=True):
         if not dcc_mode:
             try:                                                                                    
                 dcc_mode = os.environ["DCC_MODE"]                                                   
@@ -58,7 +58,7 @@ class Submit():
         self.ENC_CONN = euc.Connection(self.dcc_mode)
         #: When patching, there is the option to extend array properties or overwrite their values.
         #: The default is to extend.
-        self.extend_arrays_when_patching = True
+        self.extend_arrays = extend_arrays
 
     def filter_standard_attrs(self, payload):
         attrs = ["created_at", "id", "owner_id", "updated_at", "user_id"]
@@ -115,18 +115,18 @@ class Submit():
             the 'uuid' property. 
         """
         payload[self.ENC_CONN.PROFILE_KEY] = dcc_profile
-        rec = pulsar_model.get(pulsar_rec_id)
-        aliases = payload.get(aliases) or []
+        rec = pulsar_model(pulsar_rec_id)
+        aliases = payload.get("aliases", [])
         aliases.append(rec.abbrev_id())
         aliases = list(set(aliases))
         # Add value of 'name' property as an alias, if this property exists for the given model.
         try:
-            name = self.sanitize_prop_val(rec["name"])
+            name = self.sanitize_prop_val(rec.name)
             if name:
                 aliases.append(name)
         except KeyError:
             pass
-        payload["aliaes"] = aliases
+        payload["aliases"] = aliases
     
         # `dict`. The POST response if the record didn't yet exist on the ENCODE Portal, or the
         # record itself if it does already exist. Note that the dict. will be empty if the connection
@@ -171,7 +171,7 @@ class Submit():
         attachment["href"] = href
         payload["attachment"] = attachment
         if patch:
-            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays_when_patching))
+            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays)
         else:
             res = self.post(payload=payload, dcc_profile="document", pulsar_model=models.Document, pulsar_rec_id=rec_id)
         return res
@@ -208,7 +208,7 @@ class Submit():
         payload["documents"] = doc_upstreams
         # Submit
         if patch:
-            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays_when_patching)
+            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays)
         else:
             res = self.post(payload=payload, dcc_profile="treatment", pulsar_model=models.Treatment, pulsar_rec_id=rec_id)
         return res
@@ -228,37 +228,54 @@ class Submit():
         btn = models.BiosampleTermName(rec.biosample_term_name_id)
         payload["biosample_term_name"] = btn.name.lower() #Portal requires lower-case
         payload["biosample_term_id"] = btn.accession
+
         bty = models.BiosampleType(rec.biosample_type_id)
         payload["biosample_type"] = bty.name
+
         date_biosample_taken = rec.date_biosample_taken
         if date_biosample_taken:
             if bty.name == "tissue":
                 payload["date_obtained"] = date_biosample_taken
             else:
                 payload["culture_harvest_date"] = date_biosample_taken
+
         desc = rec.description
         if desc:
             payload["description"] = desc
+
+        donor = models.Donor(rec.donor_id)
+        donor_upstream = donor.get_upstream() 
+        if not donor_upstream:
+            raise Exception("Donor '{}' of biosample '{}' does not have its upstream set. Donors must be registered with the DCC directly.".format(donor.id, rec_id))
+        payload["donor"] = donor_upstream
+
         lot_id = rec.lot_identifier
         if lot_id:
             payload["lot_id"] = lot_id
+
         nih_cert = rec.nih_institutional_certification
         if nih_cert:
             payload["nih_institutional_certification"] = nih_cert
+
         payload["organism"] = "human"
+
         passage_number = rec.passage_number
         if passage_number:
             payload["passage_number"] = passage_number
+
         starting_amount = rec.starting_amount
         if starting_amount:
             payload["starting_amount"] = starting_amount
             payload["starting_amount_units"] = models.Unit(rec.starting_amount_units_id).name
+
         submitter_comment = rec.submitter_comments
         if submitter_comment:
             payload["submitter_comment"] = submitter_comment
+
         preservation_method = rec.tissue_preservation_method
         if preservation_method:
             payload["preservation_method"] = preservation_method
+
         prod_id = rec.vendor_product_identifier
         if prod_id:
             payload["product_id"] = prod_id
@@ -275,18 +292,12 @@ class Submit():
         if doc_ids:
             docs = [models.Document(d) for d in doc_ids]
             doc_upstreams = []
-            for doc in doc:
+            for doc in docs:
                 doc_upstream = doc.get_upstream() 
                 if not doc_upstream:
                     doc_upstream = self.post_document(doc.id)
                 doc_upstreams.append(doc_upstream)
             payload["documents"] = doc_upstreams
-    
-        donor = models.Donor(rec.donor_id)
-        donor_upstream = donor.get_upstream() 
-        if not donor_upstream:
-            raise Exception("Donor '{}' of biosample '{}' does not have its upstream set. Donors must be registered with the DCC directly.".format(donor.id, rec_id))
-        payload["donor"] = donor_upstream
     
         part_of_biosample_id = rec.part_of_id
         if part_of_biosample_id:
@@ -325,7 +336,7 @@ class Submit():
             payload["treatments"] = treat_upstreams
    
         if patch:  
-            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays_when_patching)
+            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays)
         else:
             res = self.post(payload=payload, dcc_profile="biosample", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
         return res
@@ -379,7 +390,7 @@ class Submit():
 
         # Submit payload
         if patch:  
-            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays_when_patching))
+            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays)
         else:
             res = self.post(payload=payload, dcc_profile="library", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
         return res
@@ -426,7 +437,7 @@ class Submit():
         payload["library"] = library_upstream
         # Submit payload
         if patch:  
-            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays_when_patching))
+            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays)
         else:
             res = self.post(payload=payload, dcc_profile="replicate", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
         return res

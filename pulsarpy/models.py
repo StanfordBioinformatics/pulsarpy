@@ -166,7 +166,6 @@ class Model(metaclass=Meta):
     MODEL_ABBR = ""  # subclasses define
     HEADERS = {'accept': 'application/json', 'content-type': 'application/json', 'Authorization': 'Token token={}'.format(p.API_TOKEN)}
 
-    #: A reference to the `debug` logging instance that was created earlier in ``encode_utils.debug_logger``.
     #: This class adds a file handler, such that all messages sent to it are logged to this
     #: file in addition to STDOUT.
     debug_logger = logging.getLogger(p.DEBUG_LOGGER_NAME)
@@ -192,6 +191,9 @@ class Model(metaclass=Meta):
     log_msg = "-----------------------------------------------------------------------------------"
     debug_logger.debug(log_msg) 
     error_logger.error(log_msg) 
+    log_msg = f"Connecting to {p.URL}"
+    error_logger.error(log_msg)
+    debug_logger.debug(log_msg) 
     
 
     def __init__(self, uid=None, upstream=None):
@@ -220,7 +222,6 @@ class Model(metaclass=Meta):
             raise ValueError("Either the 'uid' or 'upstream' parameter must be set.")
         self.record_url = os.path.join(self.URL, str(self.rec_id))
         self.__dict__["attrs"] = self._get() #avoid call to self.__setitem__() for this attr.
-        self.log_error("Connecting to {}".format(p.URL))
 
     def __getattr__(self, name):
         """
@@ -242,7 +243,7 @@ class Model(metaclass=Meta):
     def _get(self):
         """Fetches a record by the record's ID.
         """
-        print("Getting {} record with ID {}: {}".format(self.__class__.__name__, self.rec_id, self.record_url))
+        self.debug_logger.debug("GET {} record with ID {}: {}".format(self.__class__.__name__, self.rec_id, self.record_url))
         res = requests.get(url=self.record_url, headers=self.HEADERS, verify=False)
         self.write_response_html_to_file(res,"get_bob.html")
         res.raise_for_status()
@@ -359,7 +360,7 @@ class Model(metaclass=Meta):
             raise ValueError("The 'payload' parameter must be provided a dictionary object.")
         url = os.path.join(cls.URL, "find_by")
         payload = {"find_by": payload}
-        print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
+        cls.debug_logger.debug("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
         res = requests.post(url=url, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
         res_json = res.json()
@@ -394,7 +395,7 @@ class Model(metaclass=Meta):
             raise ValueError("The 'payload' parameter must be provided a dictionary object.")
         url = os.path.join(cls.URL, "find_by_or")
         payload = {"find_by_or": payload}
-        print("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
+        cls.debug_logger.debug("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
         res = requests.post(url=url, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
         if res:
@@ -659,7 +660,7 @@ class CrisprModification(Model):
     def clone(self, biosample_id):
        biosample_id = Model.replace_name_with_id(model=Biosample, name=biosample_id)
        url = self.record_url +  "/clone"
-       print("Cloning with URL {}".format(url))
+       self.debug_logger.debug("Cloning with URL {}".format(url))
        payload = {"biosample_id": biosample_id}
        res = requests.post(url=url, data=json.dumps(payload), headers=self.HEADERS, verify=False)
        res.raise_for_status()
