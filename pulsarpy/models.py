@@ -29,6 +29,7 @@ import pulsarpy as p
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 THIS_MODULE = import_module(__name__)
+HEADERS = {'accept': 'application/json', 'content-type': 'application/json', 'Authorization': 'Token token={}'.format(p.API_TOKEN)}
 
 # Curl Examples
 #
@@ -91,6 +92,12 @@ def remove_model_prefix(uid):
     """
 
     return str(uid).split("-")[-1]
+
+def get_model_attrs(model_name):
+    url = os.path.join(p.URL, "utils/model_attrs")
+    payload = {"model_name": model_name}
+    res = requests.get(url=url,headers=HEADERS, verify=False, data=json.dumps(payload))
+    return res
 
 class Meta(type):
     @staticmethod
@@ -159,12 +166,15 @@ class Model(metaclass=Meta):
         1) PULSAR_API_URL
         2) PULSAR_TOKEN
     """
-    # Most models have an attribute alled upstream_identifier that is used to store the value of the
-    # record in an "upstream" database that is submitted to, i.e. the ENCODE Portal. Not all models
-    # have this attribute since not all are used for submission to an upstream portal. 
+    #: Most models have an attribute alled upstream_identifier that is used to store the value of the
+    #: record in an "upstream" database that is submitted to, i.e. the ENCODE Portal. Not all models
+    #: have this attribute since not all are used for submission to an upstream portal. 
     UPSTREAM_ATTR = "upstream_identifier"
     MODEL_ABBR = ""  # subclasses define
-    HEADERS = {'accept': 'application/json', 'content-type': 'application/json', 'Authorization': 'Token token={}'.format(p.API_TOKEN)}
+
+    #: Abstract attribute of type `dict` that each subclass should fulfull if it has any foreign keys.
+    #: Each key is a foreign key name and the value is the class name of the model it refers to.
+    FKEY_MAP = {}
 
     #: This class adds a file handler, such that all messages sent to it are logged to this
     #: file in addition to STDOUT.
@@ -244,7 +254,7 @@ class Model(metaclass=Meta):
         """Fetches a record by the record's ID.
         """
         self.debug_logger.debug("GET {} record with ID {}: {}".format(self.__class__.__name__, self.rec_id, self.record_url))
-        res = requests.get(url=self.record_url, headers=self.HEADERS, verify=False)
+        res = requests.get(url=self.record_url, headers=HEADERS, verify=False)
         self.write_response_html_to_file(res,"get_bob.html")
         res.raise_for_status()
         return res.json()
@@ -333,7 +343,7 @@ class Model(metaclass=Meta):
     def delete(self):
         """Deletes the record.
         """
-        res = requests.delete(url=self.record_url, headers=self.HEADERS, verify=False)
+        res = requests.delete(url=self.record_url, headers=HEADERS, verify=False)
         #self.write_response_html_to_file(res,"bob_delete.html")
         if res.status_code == 204: 
             #No content. Can't render json:
@@ -361,7 +371,7 @@ class Model(metaclass=Meta):
         url = os.path.join(cls.URL, "find_by")
         payload = {"find_by": payload}
         cls.debug_logger.debug("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
-        res = requests.post(url=url, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
+        res = requests.post(url=url, data=json.dumps(payload), headers=HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
         res_json = res.json()
         if res_json:
@@ -396,7 +406,7 @@ class Model(metaclass=Meta):
         url = os.path.join(cls.URL, "find_by_or")
         payload = {"find_by_or": payload}
         cls.debug_logger.debug("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
-        res = requests.post(url=url, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
+        res = requests.post(url=url, data=json.dumps(payload), headers=HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
         if res:
            try:
@@ -416,7 +426,7 @@ class Model(metaclass=Meta):
         Raises:
             `requests.exceptions.HTTPError`: The status code is not ok.
         """
-        res = requests.get(cls.URL, headers=cls.HEADERS, verify=False)
+        res = requests.get(cls.URL, headers=HEADERS, verify=False)
         res.raise_for_status()
         return res.json()
 
@@ -446,7 +456,7 @@ class Model(metaclass=Meta):
         payload = self.check_boolean_fields(payload)
         payload = self.__class__.add_model_name_to_payload(payload)
         self.debug_logger.debug("PATCHING payload {}".format(json.dumps(payload, indent=4)))
-        res = requests.patch(url=self.record_url, data=json.dumps(payload), headers=self.HEADERS, verify=False)
+        res = requests.patch(url=self.record_url, data=json.dumps(payload), headers=HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
         json_res = res.json()
@@ -474,11 +484,11 @@ class Model(metaclass=Meta):
             if not val:
                continue
             if key.endswith("_id"):
-                model = getattr(THIS_MODULE, cls.fkey_map[key])
+                model = getattr(THIS_MODULE, cls.FKEY_MAP[key])
                 rec_id = cls.replace_name_with_id(model=model, name=val)
                 payload[key] = rec_id
             elif key.endswith("_ids"):
-                model = getattr(THIS_MODULE, cls.fkey_map[key])
+                model = getattr(THIS_MODULE, cls.FKEY_MAP[key])
                 rec_ids = []
                 for v in val:
                    rec_id = cls.replace_name_with_id(model=model, name=v)
@@ -506,7 +516,7 @@ class Model(metaclass=Meta):
         payload = cls.check_boolean_fields(payload)
         payload = cls.add_model_name_to_payload(payload)
         cls.debug_logger.debug("POSTING payload {}".format(json.dumps(payload, indent=4)))
-        res = requests.post(url=cls.URL, data=json.dumps(payload), headers=cls.HEADERS, verify=False)
+        res = requests.post(url=cls.URL, data=json.dumps(payload), headers=HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
         if not res.ok:
             cls.log_error(res.text)
@@ -565,19 +575,19 @@ class Barcode(Model):
 
 class Biosample(Model):
     MODEL_ABBR = "B"
-    fkey_map = {}
-    fkey_map["biosample_term_name_id"] = "BiosampleTermName"
-    fkey_map["biosample_type_id"] = "BiosampleType"
-    fkey_map["chipseq_experiment_id"] = "ChipseqExperiment"
-    fkey_map["crispr_modification_id"] = "CrisprModification"
-    fkey_map["donor_id"] = "Donor"
-    fkey_map["owner_id"] = "Owner"
-    fkey_map["part_of_id"] = "Biosample"
-    fkey_map["transfected_by_id"] = "User"
-    fkey_map["vendor_id"] = "Vendor"
-    fkey_map["document_ids"] = "Document"
-    fkey_map["pooled_from_biosample_ids"] = "Biosample"
-    fkey_map["treatment_ids"] = "Treatment"
+    FKEY_MAP = {}
+    FKEY_MAP["biosample_term_name_id"] = "BiosampleTermName"
+    FKEY_MAP["biosample_type_id"] = "BiosampleType"
+    FKEY_MAP["chipseq_experiment_id"] = "ChipseqExperiment"
+    FKEY_MAP["crispr_modification_id"] = "CrisprModification"
+    FKEY_MAP["donor_id"] = "Donor"
+    FKEY_MAP["owner_id"] = "Owner"
+    FKEY_MAP["part_of_id"] = "Biosample"
+    FKEY_MAP["transfected_by_id"] = "User"
+    FKEY_MAP["vendor_id"] = "Vendor"
+    FKEY_MAP["document_ids"] = "Document"
+    FKEY_MAP["pooled_from_biosample_ids"] = "Biosample"
+    FKEY_MAP["treatment_ids"] = "Treatment"
 
 
 class BiosampleOntology(Model):
@@ -592,29 +602,29 @@ class BiosampleType(Model):
 
 class ChipBatch(Model):
     MODEL_ABBR = "CB"
-    fkey_map = {}
-    fkey_map["user_id"] = "User"
-    fkey_map["analyst_id"] = "User"
-    fkey_map["chip_batch_item_ids"] = "ChipBatch"
+    FKEY_MAP = {}
+    FKEY_MAP["user_id"] = "User"
+    FKEY_MAP["analyst_id"] = "User"
+    FKEY_MAP["chip_batch_item_ids"] = "ChipBatch"
 
 class ChipBatchItem(Model):
     MODEL_ABBR = "CBI"
-    fkey_map = {}
-    fkey_map["user_id"] = "User"
-    fkey_map["biosample_id"] = "Biosample"
-    fkey_map["chip_batch_id"] = "ChipBatch"
-    fkey_map["concentration_unit_id"] = "Unit"
+    FKEY_MAP = {}
+    FKEY_MAP["user_id"] = "User"
+    FKEY_MAP["biosample_id"] = "Biosample"
+    FKEY_MAP["chip_batch_id"] = "ChipBatch"
+    FKEY_MAP["concentration_unit_id"] = "Unit"
 
 class ChipseqExperiment(Model):
     MODEL_ABBR = "CS"
-    fkey_map = {}
-    fkey_map["document_ids"] = "Document"
-    fkey_map["control_replicate_ids"] = "Biosample"
-    fkey_map["replicate_ids"] = "Biosample"
-    fkey_map["starting_biosample_id"] = "Biosample"
-    fkey_map["target_id"] = "Target"
-    fkey_map["user_id"] = "User"
-    fkey_map["wild_type_control_id"] = "Biosample"
+    FKEY_MAP = {}
+    FKEY_MAP["document_ids"] = "Document"
+    FKEY_MAP["control_replicate_ids"] = "Biosample"
+    FKEY_MAP["replicate_ids"] = "Biosample"
+    FKEY_MAP["starting_biosample_id"] = "Biosample"
+    FKEY_MAP["target_id"] = "Target"
+    FKEY_MAP["user_id"] = "User"
+    FKEY_MAP["wild_type_control_id"] = "Biosample"
 
 
 class DataStorage(Model):
@@ -647,22 +657,22 @@ class CrisprConstruct(Model):
 
 class CrisprModification(Model):
     MODEL_ABBR = "CRISPR"
-    fkey_map = {}
-    fkey_map["biosample_ids"] = "Biosample"
-    fkey_map["crispr_construct_ids"] = "CrisprConstruct"
-    fkey_map["document_ids"] = "Document"
-    fkey_map["donor_construct_id"] = "DonorConstruct"
-    fkey_map["from_prototype_id"] = "CrisprModification"
-    fkey_map["part_of_id"] = "CrisprModification"
-    fkey_map["target_id"] = "Target"
-    fkey_map["user_id"] = "User"
+    FKEY_MAP = {}
+    FKEY_MAP["biosample_ids"] = "Biosample"
+    FKEY_MAP["crispr_construct_ids"] = "CrisprConstruct"
+    FKEY_MAP["document_ids"] = "Document"
+    FKEY_MAP["donor_construct_id"] = "DonorConstruct"
+    FKEY_MAP["from_prototype_id"] = "CrisprModification"
+    FKEY_MAP["part_of_id"] = "CrisprModification"
+    FKEY_MAP["target_id"] = "Target"
+    FKEY_MAP["user_id"] = "User"
 
     def clone(self, biosample_id):
        biosample_id = Model.replace_name_with_id(model=Biosample, name=biosample_id)
        url = self.record_url +  "/clone"
        self.debug_logger.debug("Cloning with URL {}".format(url))
        payload = {"biosample_id": biosample_id}
-       res = requests.post(url=url, data=json.dumps(payload), headers=self.HEADERS, verify=False)
+       res = requests.post(url=url, data=json.dumps(payload), headers=HEADERS, verify=False)
        res.raise_for_status()
        self.write_response_html_to_file(res,"bob.html")
        self.debug_logger.debug("Cloned GeneticModification {}".format(self.rec_id))
@@ -683,7 +693,7 @@ class Document(Model):
     def download(self):
         # The sever is Base64 encoding the payload, so we'll need to base64 decode it.
         url = self.record_url + "/download"
-        res = requests.get(url=url, headers=self.HEADERS, verify=False)
+        res = requests.get(url=url, headers=HEADERS, verify=False)
         res.raise_for_status()
         data = base64.b64decode(res.json()["data"])
         return data
@@ -695,23 +705,23 @@ class FileReference(Model):
 
 class Library(Model):
     MODEL_ABBR = "L"
-    fkey_map = {}
+    FKEY_MAP = {}
     # belongs_to/ has_one
-    fkey_map["barcode_id"] = "Barcode"
-    fkey_map["biosample_id"] = "Biosample"
-    fkey_map["concentration_unit_id"] = "Unit"
-    fkey_map["from_prototype_id"] = "Library"
-    fkey_map["library_fragmentation_method_id"] = "LibraryFragmentationMethod"
-    fkey_map["nucleic_acid_term_id"] = "NucleicAcidTerm"
-    fkey_map["paired_barcode_id"] = "PairedBarcode"
-    fkey_map["sequencing_library_prep_kit_id"] = "SequencingLibraryPrepKit"
-    fkey_map["sequencing_request_ids"] = "SequencingRequest"
-    fkey_map["single_cell_sorting_id"] = "SingleCellSorting"
-    fkey_map["user_id"] = "User"
-    fkey_map["vendor_id"] = "Vendor"
-    fkey_map["well_id"] = "Well"
+    FKEY_MAP["barcode_id"] = "Barcode"
+    FKEY_MAP["biosample_id"] = "Biosample"
+    FKEY_MAP["concentration_unit_id"] = "Unit"
+    FKEY_MAP["from_prototype_id"] = "Library"
+    FKEY_MAP["library_fragmentation_method_id"] = "LibraryFragmentationMethod"
+    FKEY_MAP["nucleic_acid_term_id"] = "NucleicAcidTerm"
+    FKEY_MAP["paired_barcode_id"] = "PairedBarcode"
+    FKEY_MAP["sequencing_library_prep_kit_id"] = "SequencingLibraryPrepKit"
+    FKEY_MAP["sequencing_request_ids"] = "SequencingRequest"
+    FKEY_MAP["single_cell_sorting_id"] = "SingleCellSorting"
+    FKEY_MAP["user_id"] = "User"
+    FKEY_MAP["vendor_id"] = "Vendor"
+    FKEY_MAP["well_id"] = "Well"
     # has_many
-    fkey_map["document_ids"] = "Document"
+    FKEY_MAP["document_ids"] = "Document"
 
 
 class LibraryFragmentationMethod(Model):
@@ -737,11 +747,11 @@ class SequencingLibraryPrepKit(Model):
 
 class SequencingRequest(Model):
     MODEL_ABBR = "SREQ"
-    fkey_map = {}
-    fkey_map["concentration_unit_id"] = "Unit"
-    fkey_map["sequencing_platform_id"] = "SequencingPlatform"
-    fkey_map["sequencing_center_id"] = "SequencingCenter"
-    fkey_map["submitted_by_id"] = "User"
+    FKEY_MAP = {}
+    FKEY_MAP["concentration_unit_id"] = "Unit"
+    FKEY_MAP["sequencing_platform_id"] = "SequencingPlatform"
+    FKEY_MAP["sequencing_center_id"] = "SequencingCenter"
+    FKEY_MAP["submitted_by_id"] = "User"
     
 
 class SequencingPlatform(Model):
@@ -758,31 +768,31 @@ class SequencingResult(Model):
 
 class Shipping(Model):
     MODEL_ABBR = "SH"
-    fkey_map = {}
-    fkey_map["biosample_id"] = "Biosample"
-    fkey_map["from_id"] = "Address"
-    fkey_map["to_id"] = "Address"
+    FKEY_MAP = {}
+    FKEY_MAP["biosample_id"] = "Biosample"
+    FKEY_MAP["from_id"] = "Address"
+    FKEY_MAP["to_id"] = "Address"
     
 
 class SingleCellSorting(Model):
     MODEL_ABBR = "SCS"
-    fkey_map = {}
-    fkey_map["analysis_ids"] = "Analysis"
-    fkey_map["document_ids"] = "Document"
-    fkey_map["library_prototype_id"] = "Library"
-    fkey_map["plate_ids"] = "Plate"
-    fkey_map["sorting_biosample_id"] = "Biosample"
-    fkey_map["starting_biosample"] = "Biosample"
-    fkey_map["user_id"] = "User"
+    FKEY_MAP = {}
+    FKEY_MAP["analysis_ids"] = "Analysis"
+    FKEY_MAP["document_ids"] = "Document"
+    FKEY_MAP["library_prototype_id"] = "Library"
+    FKEY_MAP["plate_ids"] = "Plate"
+    FKEY_MAP["sorting_biosample_id"] = "Biosample"
+    FKEY_MAP["starting_biosample"] = "Biosample"
+    FKEY_MAP["user_id"] = "User"
 
 
 class Target(Model):
     MODEL_ABBR = "TRG"
-    fkey_map = {}
-    fkey_map["user_id"] = "User"
-    fkey_map["antibody_ids"] = "Antibody"
-    fkey_map["crispr_construct_ids"] = "CrisprConstruct"
-    fkey_map["donor_construct_ids"] = "DonorConstruct"
+    FKEY_MAP = {}
+    FKEY_MAP["user_id"] = "User"
+    FKEY_MAP["antibody_ids"] = "Antibody"
+    FKEY_MAP["crispr_construct_ids"] = "CrisprConstruct"
+    FKEY_MAP["donor_construct_ids"] = "DonorConstruct"
 
 
 class Treatment(Model):
@@ -805,7 +815,7 @@ class User(Model):
             `NoneType`: None.
         """
         url = self.record_url + "/archive"
-        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=self.HEADERS, verify=False)
+        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
 
@@ -819,7 +829,7 @@ class User(Model):
             `NoneType`: None.
         """
         url = self.record_url + "/unarchive"
-        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=self.HEADERS, verify=False)
+        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
 
@@ -831,7 +841,7 @@ class User(Model):
             `str`: The new API key.
         """
         url = self.record_url + "/generate_api_key"
-        res = requests.patch(url=url, headers=self.HEADERS, verify=False)
+        res = requests.patch(url=url, headers=HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
         return res.json()["token"]
@@ -845,7 +855,7 @@ class User(Model):
             `NoneType`: None.
         """
         url = self.record_url + "/remove_api_key"
-        res = requests.patch(url=url, headers=self.HEADERS, verify=False)
+        res = requests.patch(url=url, headers=HEADERS, verify=False)
         res.raise_for_status()
         self.api_key = ""
 

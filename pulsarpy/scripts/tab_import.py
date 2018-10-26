@@ -50,6 +50,7 @@ def main():
     skip_dups = args.skip_dups
     infile = args.infile
     model = getattr(models, args.model)
+    model_attrs = models.get_model_attrs(model)
     patch = args.patch
     append_to_arrays = True
     if args.no_append:
@@ -63,6 +64,12 @@ def main():
         if RECORD_ID_FIELD in header:
             header.remove(RECORD_ID_FIELD) # No use for it in POST mode.
     field_positions = [header.index(x) for x in header if not x.startswith("#") and x.strip()]
+    # Check for invalid attribute names
+    for f in field_positions:
+        attr_name = header.index(f)
+        if attr_name not in model.FKEY_MAP:
+            if attr_name not in model_attrs:
+                raise Exception(f"Unknown field name '{attr_name}'.")
     line_cnt = 1 # Already read header line
     for line in fh:
         line_cnt += 1
