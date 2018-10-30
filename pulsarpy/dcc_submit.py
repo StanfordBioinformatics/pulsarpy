@@ -44,30 +44,30 @@ class NoFastqFile(Exception):
     pass
 
 
-def dec(model_class):
-    """
-    A decorator that is to be used with the post_* methods defined in the Submit class defined below.
-    """
-
-    def wrapper(func):
-
-        def inner(self, rec_id, patch=False, *args, **kwargs):
-            """
-            Saves time by checking whether a record needs to be posted to the Portal before it's 
-            payload is constructed.  It need not be posted if in Pulsar it has the upstream_identifier
-            attribute set AND the 'patch' argument is False. The decorated method will thus only run
-            if upstream_identifier isn't set, or if the 'patch' argument is True. 
-            """
-            rec = model_class(rec_id) 
-            upstream = rec.get_upstream() 
-            if upstream and not patch:
-                # Then no need to post
-                return upstream
-            else:
-                self.func(rec_id=rec_id, patch=patch, *args, **kwargs)
-        return inner
-
-    return wrapper
+#def dec(model_class):
+#    """
+#    A decorator that is to be used with the post_* methods defined in the Submit class defined below.
+#    """
+#
+#    def wrapper(func):
+#
+#        def inner(self, rec_id, patch=False, *args, **kwargs):
+#            """
+#            Saves time by checking whether a record needs to be posted to the Portal before it's 
+#            payload is constructed.  It need not be posted if in Pulsar it has the upstream_identifier
+#            attribute set AND the 'patch' argument is False. The decorated method will thus only run
+#            if upstream_identifier isn't set, or if the 'patch' argument is True. 
+#            """
+#            rec = model_class(rec_id) 
+#            upstream = rec.get_upstream() 
+#            if upstream and not patch:
+#                # Then no need to post
+#                return upstream
+#            else:
+#                self.func(rec_id=rec_id, patch=patch, *args, **kwargs)
+#        return inner
+#
+#    return wrapper
 
 
 class Submit():
@@ -120,10 +120,17 @@ class Submit():
 
     def post(self, payload, dcc_profile, pulsar_model, pulsar_rec_id):
         """
-        A wrapper over `encode_utils.connection.Connection.post()`. Adds an aliases to the payload
-        being the records record ID.  It sets the profile key in the
-        payload and also encapsulates logic about setting the upstream_identifier of the Pulsar
-        record.
+        A wrapper over `encode_utils.connection.Connection.post()`. 
+
+        First checks if the Pulsar record has an upstream_identifier set, and if set, returns
+        that. 
+
+        Adds aliases to the payload being the record's record ID and name. 
+
+        Sets the profile key in the payload.
+
+        If the record is successfully posted to the prod ENCODE Portal, then sets the 
+        upstream_identifier attribute in the Pulsar record.
     
         Args:
             payload: `dict`. The new record attributes to submit.
@@ -142,6 +149,10 @@ class Submit():
         """
         payload[self.ENC_CONN.PROFILE_KEY] = dcc_profile
         rec = pulsar_model(pulsar_rec_id)
+        upstream = rec.upstream_identifier
+        if upstream:
+            # No need to POST. 
+            return upstream
         aliases = payload.get("aliases", [])
         aliases.append(rec.abbrev_id())
         aliases = list(set(aliases))
@@ -173,17 +184,47 @@ class Submit():
             print("upstream_identifier attribute set successfully.")
         return upstream
     
-    @dec(models.CrisprModification)
     def post_crispr_modification(self, rec_id, patch=False):
         rec = models.CrisprModification(rec_id)
         payload = {}
         payload["category"] = rec.category # Required
+        payload["description"] = rec.description
+        payload["documents"] = self.post_documents(rec.document_ids)
         payload["method"] = "CRISPR"       # Required
+        payload["modified_site_by_target_id"] = rec.target_id
+        # Q) Do we need to set modified_site_by_coordinates?
+        # Q) Do we need to set modified_site_by_sequence?
         payload["purpose"] = rec.purpose   # Required
+
+        # CrisprConstruct(s)
+        cc_ids = rec.crispr_construct_ids
+        ccs = [models.CrisprConstruct(i) for i in cc_ids]
+        guide_seqs = []
+        guide_seqs.append(c.guide_sequence for c in ccs)
+        payload["guide_rna_sequences"] = guide_seqs
+
+        # DonorConstruct
+        dc = models.DonorConstruct(rec.donor_construct_id)
+        payload["introduced_sequence"] = dc.insert_sequence
+        construct_tags_ids = dc.construct_tag_ids
+        # Note that CrisprConstruct also has_many construct_tags. Those are not part of the donor
+        # insert though. 
+        construct_tags = [models.ConstructTag(i) for i in construct_tag_ids]
+        construct_tag_names = [x.name for x in construct_tags]
+        # Q) How to submit the construct tag "eGFP (MH170481)"? This is an enum attribute on the Portal
+        # side, and it has eGFP but nother else eGFP related.
+        introduced_tags = []
+        for tag in construct_tag_names:
+            introduced_tags.append({"name": tag, "location": "N-terminal"}])
+        payload["introduced_tags"] = introduced_tags
+            
+        
+        
+        
+        
         res = self.post(payload=payload, dcc_profile="genetic_modification", pulsar_model=models.CrisprModification, pulsar_rec_id=rec_id)
         return res
     
-    @dec(models.Document)
     def post_document(self, rec_id, patch=False):
         rec = models.Document(rec_id)
         payload = {}
@@ -213,7 +254,6 @@ class Submit():
             upstreams.append(self.post_document(rec_id=i, patch=patch))
         return upstream_ids
 
-    @dec(models.Treatment)
     def post_treatment(self, rec_id, patch=False):
         rec = models.Treatment(rec_id)
         payload = {}
@@ -234,9 +274,7 @@ class Submit():
         payload["treatment_term_id"] = ttn["accession"]
         payload["treatment_term_name"] = ttn["name"]
         payload["treatment_type"] = rec.treatment_type
-
-        doc_ids = rec.document_ids 
-        payload["documents"] = self.post_documents(doc_ids) 
+        payload["documents"] = self.post_documents(rec.document_ids)
         # Submit
         if patch:
             res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays)
@@ -245,14 +283,12 @@ class Submit():
         return res
 
     
-    @dec(models.Vendor)
     def post_vendor(self, rec_id, patch=False):
         """
         Vendors must be registered directly by the DCC personel. 
         """
         raise Exception("Vendors must be registered directly by the DCC personel.")
 
-    @dec(models.Biosample)
     def post_biosample(self, rec_id, patch=False):
         rec = models.Biosample(rec_id)
         # The alias lab prefixes will be set in the encode_utils package if the DCC_LAB environment
@@ -315,14 +351,9 @@ class Submit():
     
         cm_id = rec.crispr_modification_id
         if cm_id:
-            cm = models.CrisprModification(cm_id)
-            cm_upstream = cm.get_upstream() 
-            if not cm_upstream:
-                cm_upstream = self.post_crispr_modification(cm_id)
-            payload["genetic_modifications"] = cm_upstream
+            payload["genetic_modifications"] = self.post_crispr_modification(cm_id) 
     
-        doc_ids = rec.document_ids
-        payload["documents"] = self.post_documents(doc_ids)
+        payload["documents"] = self.post_documents(rec.document_ids)
     
         part_of_biosample_id = rec.part_of_id
         if part_of_biosample_id:
@@ -366,7 +397,6 @@ class Submit():
             res = self.post(payload=payload, dcc_profile="biosample", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
         return res
 
-    @dec(models.Library)
     def post_library(self, rec_id, patch=False):
         """
         This method will check whether the biosample associated to this library is submitted. If it
@@ -380,8 +410,7 @@ class Submit():
         # If this Library record is a SingleCellSorting.library_prototype, then the Biosample it will
         # be linked to is the SingleCellSorting.sorting_biosample.
         payload["biosample"] = self.post_biosample(rec_id=rec.biosample_id, patch=False)
-        doc_ids = rec.document_ids
-        payload["documents"] = self.post_documents(doc_ids)
+        payload["documents"] = self.post_documents(rec.document_ids)
         fragmentation_method_id = rec.library_fragmentation_method_id
         if fragmentation_method_id:
             fragmentation_method = models.LibraryFragmentationMethod(fragmentation_method_id).name
@@ -530,8 +559,7 @@ class Submit():
         payload["biosample_term_name"] = sorting_biosample["biosample_term_name"]["name"]
         payload["biosmple_term_id"] = sorting_biosample["biosample_term_name"]["accession"]
         payload["description"] = rec.description
-        doc_ids = rec.document_ids
-        payload["documents"] = self.post_documents(doc_ids)
+        payload["documents"] = self.post_documents(rec.document_ids)
         exp_upstream = self.post(payload=payload, dcc_profile="experiment", pulsar_model="SingleCellSorting", pulsar_rec_id=rec_id)
 
         # Submit biosample
