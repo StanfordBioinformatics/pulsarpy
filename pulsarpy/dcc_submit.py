@@ -44,6 +44,23 @@ class NoFastqFile(Exception):
     pass
 
 
+def dec(model_class):
+
+    class Dec():
+    
+        def __init__(self, func ):
+            self.func = func
+        
+        def __call__(self, rec_id, patch, *args, **kwargs)
+            rec = model_class(rec_id) 
+            upstream = rec.get_upstream() 
+            if doc_upstream and not patch:
+                # Then no need to post
+                return upstream
+            else:
+                self.func(rec_id=rec_id, patch=patch, *args, **kwargs)
+
+
 class Submit():
 
     def __init__(self, dcc_mode=None, extend_arrays=True):
@@ -150,9 +167,13 @@ class Submit():
     def post_crispr_modification(self, rec_id, patch=False):
         rec = models.CrisprModification(rec_id)
         payload = {}
+        payload["category"] = rec.category # Required
+        payload["method"] = "CRISPR"       # Required
+        payload["purpose"] = rec.purpose   # Required
         res = self.post(payload=payload, dcc_profile="genetic_modification", pulsar_model=models.CrisprModification, pulsar_rec_id=rec_id)
         return res
     
+    @dec(models.Document)
     def post_document(self, rec_id, patch=False):
         rec = models.Document(rec_id)
         payload = {}
@@ -176,6 +197,12 @@ class Submit():
             res = self.post(payload=payload, dcc_profile="document", pulsar_model=models.Document, pulsar_rec_id=rec_id)
         return res
 
+    def post_documents(self, rec_ids, patch=False):
+        upstreams = []
+        for i in rec_ids:
+            upstreams.append(self.post_document(rec_id=i, patch=patch))
+        return upstream_ids
+
     def post_treatment(self, rec_id, patch=False):
         rec = models.Treatment(rec_id)
         payload = {}
@@ -197,15 +224,8 @@ class Submit():
         payload["treatment_term_name"] = ttn["name"]
         payload["treatment_type"] = rec.treatment_type
 
-        doc_ids = rec.document_ids
-        docs = [models.Document(d) for d in doc_ids]
-        doc_upstreams = []
-        for doc in docs:
-            doc_upstream = rec.get_upstream() 
-            if not doc_upstream:
-                doc_upstream = post_document(doc)
-            doc_upstreams.append(doc_upstream)
-        payload["documents"] = doc_upstreams
+        doc_ids = rec.document_ids 
+        payload["documents"] = self.post_documents(doc_ids) 
         # Submit
         if patch:
             res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays)
@@ -289,15 +309,7 @@ class Submit():
             payload["genetic_modifications"] = cm_upstream
     
         doc_ids = rec.document_ids
-        if doc_ids:
-            docs = [models.Document(d) for d in doc_ids]
-            doc_upstreams = []
-            for doc in docs:
-                doc_upstream = doc.get_upstream() 
-                if not doc_upstream:
-                    doc_upstream = self.post_document(doc.id)
-                doc_upstreams.append(doc_upstream)
-            payload["documents"] = doc_upstreams
+        payload["documents"] = self.post_documents(doc_ids)
     
         part_of_biosample_id = rec.part_of_id
         if part_of_biosample_id:
@@ -358,15 +370,7 @@ class Submit():
             biosample_upstream = self.post_biosample(rec_id=rec.biosample_id, patch=False)
         payload["biosample"] = biosample_upstream
         doc_ids = rec.document_ids
-        docs = [models.Document(d) for d in doc_ids]
-        doc_upstreams = []
-        for d in docs:
-            upstream = d.get_upstream() 
-            if not upstream:
-                upstream = self.post_document(rec_id=d.id, patch=False)
-                doc_upstreams.append(upstream)
-        if doc_upstreams:
-            payload["documents"] = doc_upstreams
+        payload["documents"] = self.post_documents(doc_ids)
         fragmentation_method_id = rec.library_fragmentation_method_id
         if fragmentation_method_id:
             fragmentation_method = models.LibraryFragmentationMethod(fragmentation_method_id).name
@@ -521,12 +525,8 @@ class Submit():
         payload["biosample_term_name"] = sorting_biosample["biosample_term_name"]["name"]
         payload["biosmple_term_id"] = sorting_biosample["biosample_term_name"]["accession"]
         payload["description"] = rec.description
-        docs = rec.documents
-        doc_upstreams = []
-        for d in docs:
-            upstream = self.post_document(rec_id=d)
-            doc_upstreams.append(upstream)
-        payload["documents"] = doc_upstreams
+        doc_ids = rec.document_ids
+        payload["documents"] = self.post_documents(doc_ids)
         exp_upstream = self.post(payload=payload, dcc_profile="experiment", pulsar_model="SingleCellSorting", pulsar_rec_id=rec_id)
 
         # Submit biosample
@@ -547,4 +547,3 @@ class Submit():
                 storage_loc_id = run.storage_location_id
                 sres_ids = run.sequencing_result_ids
                 # Submit a file record
-        

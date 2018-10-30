@@ -50,7 +50,7 @@ def main():
     skip_dups = args.skip_dups
     infile = args.infile
     model = getattr(models, args.model)
-    model_attrs = models.get_model_attrs(model)
+    model_attrs = models.get_model_attrs(model.__name__)
     patch = args.patch
     append_to_arrays = True
     if args.no_append:
@@ -66,7 +66,7 @@ def main():
     field_positions = [header.index(x) for x in header if not x.startswith("#") and x.strip()]
     # Check for invalid attribute names
     for f in field_positions:
-        attr_name = header.index(f)
+        attr_name = header[f]
         if attr_name not in model.FKEY_MAP:
             if attr_name not in model_attrs:
                 raise Exception(f"Unknown field name '{attr_name}'.")

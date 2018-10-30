@@ -96,8 +96,9 @@ def remove_model_prefix(uid):
 def get_model_attrs(model_name):
     url = os.path.join(p.URL, "utils/model_attrs")
     payload = {"model_name": model_name}
-    res = requests.get(url=url,headers=HEADERS, verify=False, data=json.dumps(payload))
-    return res
+    response = requests.get(url=url,headers=HEADERS, verify=False, data=json.dumps(payload))
+    response.raise_for_status()
+    return response.json()
 
 class Meta(type):
     @staticmethod
@@ -629,6 +630,8 @@ class ChipseqExperiment(Model):
 
 class DataStorage(Model):
     MODEL_ABBR = "DS"
+    FKEY_MAP = {}
+    FKEY_MAP["data_storage_provider_id"] = "DataStorageProvider"
 
 
 class DataStorageProvider(Model):
@@ -760,6 +763,10 @@ class SequencingPlatform(Model):
 
 class SequencingRun(Model):
     MODEL_ABBR = "SRUN"
+    FKEY_MAP = {}
+    FKEY_MAP["data_storage_id"] = "DataStorage"
+    FKEY_MAP["sequencing_request_id"] = "SequencingRequest"
+    FKEY_MAP["submitted_by_id"] = "User"
 
 
 class SequencingResult(Model):
