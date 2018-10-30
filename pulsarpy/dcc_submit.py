@@ -45,20 +45,29 @@ class NoFastqFile(Exception):
 
 
 def dec(model_class):
+    """
+    A decorator that is to be used with the post_* methods defined in the Submit class defined below.
+    """
 
-    class Dec():
-    
-        def __init__(self, func ):
-            self.func = func
-        
-        def __call__(self, rec_id, patch, *args, **kwargs)
+    def wrapper(func):
+
+        def inner(self, rec_id, patch=False, *args, **kwargs):
+            """
+            Saves time by checking whether a record needs to be posted to the Portal before it's 
+            payload is constructed.  It need not be posted if in Pulsar it has the upstream_identifier
+            attribute set AND the 'patch' argument is False. The decorated method will thus only run
+            if upstream_identifier isn't set, or if the 'patch' argument is True. 
+            """
             rec = model_class(rec_id) 
             upstream = rec.get_upstream() 
-            if doc_upstream and not patch:
+            if upstream and not patch:
                 # Then no need to post
                 return upstream
             else:
                 self.func(rec_id=rec_id, patch=patch, *args, **kwargs)
+        return inner
+
+    return wrapper
 
 
 class Submit():
@@ -164,6 +173,7 @@ class Submit():
             print("upstream_identifier attribute set successfully.")
         return upstream
     
+    @dec(models.CrisprModification)
     def post_crispr_modification(self, rec_id, patch=False):
         rec = models.CrisprModification(rec_id)
         payload = {}
@@ -203,6 +213,7 @@ class Submit():
             upstreams.append(self.post_document(rec_id=i, patch=patch))
         return upstream_ids
 
+    @dec(models.Treatment)
     def post_treatment(self, rec_id, patch=False):
         rec = models.Treatment(rec_id)
         payload = {}
@@ -234,12 +245,14 @@ class Submit():
         return res
 
     
+    @dec(models.Vendor)
     def post_vendor(self, rec_id, patch=False):
         """
         Vendors must be registered directly by the DCC personel. 
         """
         raise Exception("Vendors must be registered directly by the DCC personel.")
 
+    @dec(models.Biosample)
     def post_biosample(self, rec_id, patch=False):
         rec = models.Biosample(rec_id)
         # The alias lab prefixes will be set in the encode_utils package if the DCC_LAB environment
@@ -353,6 +366,7 @@ class Submit():
             res = self.post(payload=payload, dcc_profile="biosample", pulsar_model=models.Biosample, pulsar_rec_id=rec_id)
         return res
 
+    @dec(models.Library)
     def post_library(self, rec_id, patch=False):
         """
         This method will check whether the biosample associated to this library is submitted. If it
@@ -365,10 +379,7 @@ class Submit():
         biosample = models.Biosample(rec.biosample_id)
         # If this Library record is a SingleCellSorting.library_prototype, then the Biosample it will
         # be linked to is the SingleCellSorting.sorting_biosample.
-        biosample_upstream = biosample.get_upstream() 
-        if not biosample_upstream:
-            biosample_upstream = self.post_biosample(rec_id=rec.biosample_id, patch=False)
-        payload["biosample"] = biosample_upstream
+        payload["biosample"] = self.post_biosample(rec_id=rec.biosample_id, patch=False)
         doc_ids = rec.document_ids
         payload["documents"] = self.post_documents(doc_ids)
         fragmentation_method_id = rec.library_fragmentation_method_id
@@ -380,13 +391,7 @@ class Submit():
         payload["product_id"] = rec.vendor_product_identifier
         payload["size_range"] = rec.size_range
         payload["strand_specificity"] = rec.strand_specific
-        vendor_id = rec.vendor_id
-        if vendor_id:
-            vendor = models.Vendor(vendor_id)
-            vendor_upstream = vendor.get_upstream()
-            if not vendor_upstream:
-                vendor_upstream = self.post_vendor(rec_id=vendor_id)
-            payload["source"] = vendor_upstream
+        payload["source"] = self.post_vendor(rec_id=rec.vendor_id, patch=False)
         ssc_id = rec.single_cell_sorting_id
         if ssc_id:
            barcode_details = self.get_barcode_details_for_ssc(ssc_id=ssc_id)
