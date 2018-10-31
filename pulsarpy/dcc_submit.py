@@ -186,44 +186,61 @@ class Submit():
     
     def post_crispr_modification(self, rec_id, patch=False):
         rec = models.CrisprModification(rec_id)
+        # CrisprConstruct(s)
+        cc_ids = rec.crispr_construct_ids
+        ccs = [models.CrisprConstruct(i) for i in cc_ids]
+        # DonorConstruct
+        dc = models.DonorConstruct(rec.donor_construct_id)
+
         payload = {}
         payload["category"] = rec.category # Required
         payload["description"] = rec.description
         payload["documents"] = self.post_documents(rec.document_ids)
-        payload["method"] = "CRISPR"       # Required
-        payload["modified_site_by_target_id"] = rec.target_id
-        # Q) Do we need to set modified_site_by_coordinates?
-        # Q) Do we need to set modified_site_by_sequence?
-        payload["purpose"] = rec.purpose   # Required
 
-        # CrisprConstruct(s)
-        cc_ids = rec.crispr_construct_ids
-        ccs = [models.CrisprConstruct(i) for i in cc_ids]
         guide_seqs = []
         guide_seqs.append(c.guide_sequence for c in ccs)
         payload["guide_rna_sequences"] = guide_seqs
 
-        # DonorConstruct
-        dc = models.DonorConstruct(rec.donor_construct_id)
-        payload["introduced_sequence"] = dc.insert_sequence
-        construct_tags_ids = dc.construct_tag_ids
-        # Note that CrisprConstruct also has_many construct_tags. Those are not part of the donor
+        if rec.category in ["insertion", "replacement"]:
+            payload["introduced_sequence"] = dc.insert_sequence
+
+        payload["method"] = "CRISPR"       # Required
+        payload["modified_site_by_target_id"] = rec.target_id
+        payload["purpose"] = rec.purpose   # Required
+
+        # Note that CrisprConstruct can also has_many construct_tags. Those are not part of the donor
         # insert though. 
-        construct_tags = [models.ConstructTag(i) for i in construct_tag_ids]
+        construct_tags = [models.ConstructTag(i) for i in dc.construct_tag_ids]
         construct_tag_names = [x.name for x in construct_tags]
-        # Q) How to submit the construct tag "eGFP (MH170481)"? This is an enum attribute on the Portal
-        # side, and it has eGFP but nother else eGFP related.
         introduced_tags = []
         for tag in construct_tag_names:
-            introduced_tags.append({"name": tag, "location": "N-terminal"}])
+            if tag.startswith("eGFP"):
+                # Pulsar has two eGFP tags that differ by the linker sequence:
+                #    1) eGFP (MH170480)
+                #    2) eGFP (MH170481)
+                # The Portal, however, only has eGFP and it makes most sense to submit this as 
+                # simply eGFP and mention the linker used elsewhere. 
+                tag = "eGFP"
+            introduced_tags.append({"name": tag, "location": "C-terminal"}])
         payload["introduced_tags"] = introduced_tags
-            
-        
-        
-        
-        
-        res = self.post(payload=payload, dcc_profile="genetic_modification", pulsar_model=models.CrisprModification, pulsar_rec_id=rec_id)
-        return res
+        reagents = []
+        for i in ccs.extend(dc):
+            addgene_id = getattr(i, "addgene_id")
+            if addgene_id:
+                uri = "http://www.addgene.org/" + addgene_id
+                reagents.append({
+                    "source": "addgene",
+                    "identifier": addgene_id,
+                    "url": uri
+                })
+        payload["reagents"] = reagents
+        # ex: ENCGM094ZOS
+
+        if patch: 
+            res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays)
+        else:
+            res = self.post(payload=payload, dcc_profile="genetic_modification", pulsar_model=models.CrisprModification, pulsar_rec_id=rec_id)
+            return res
     
     def post_document(self, rec_id, patch=False):
         rec = models.Document(rec_id)
@@ -252,6 +269,11 @@ class Submit():
         upstreams = []
         for i in rec_ids:
             upstreams.append(self.post_document(rec_id=i, patch=patch))
+        return upstream_ids
+
+    def post_treatments(self, rec_ids, patch=False):
+        upstreams = []
+            upstreams.append(self.post_treatment(rec_id=i, patch=patch))
         return upstream_ids
 
     def post_treatment(self, rec_id, patch=False):
@@ -351,7 +373,7 @@ class Submit():
     
         cm_id = rec.crispr_modification_id
         if cm_id:
-            payload["genetic_modifications"] = self.post_crispr_modification(cm_id) 
+            payload["genetic_modifications"] = [self.post_crispr_modification(cm_id)]
     
         payload["documents"] = self.post_documents(rec.document_ids)
     
@@ -379,17 +401,7 @@ class Submit():
             raise Exception("Biosample '{}' has a vendor without an upstream set: Vendors are requied to be registered by the DCC personel, and Pulsar needs to have the Vendor record's '{}' attribute set.".format(rec_id, models.Model.UPSTREAM_ATTR))
         payload["source"] = vendor_upstream
     
-        treatment_ids = rec.treatment_ids
-        treat_upstreams = []
-        if treatment_ids:
-            treatments = [models.Treatment(t) for t in treatment_ids]
-            treat_upstreams = []
-            for treat in treatments:
-                treat_upstream = treat.get_upstream()
-                if not treat_upstream:
-                    treat_upstream = self.post_treatment(treat.id)
-                treat_upstreams.append(treat_upstream)
-            payload["treatments"] = treat_upstreams
+        payload["treatments"] = self.post_treatments(rec.treatment_ids)
    
         if patch:  
             res = self.ENC_CONN.patch(payload=payload, extend_array_values=self.extend_arrays)
