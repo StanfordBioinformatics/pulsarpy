@@ -197,15 +197,14 @@ class Submit():
         payload["description"] = rec.description
         payload["documents"] = self.post_documents(rec.document_ids)
 
-        guide_seqs = []
-        guide_seqs.append(c.guide_sequence for c in ccs)
+        guide_seqs = list(c.guide_sequence for c in ccs)
         payload["guide_rna_sequences"] = guide_seqs
 
         if rec.category in ["insertion", "replacement"]:
             payload["introduced_sequence"] = dc.insert_sequence
 
         payload["method"] = "CRISPR"       # Required
-        payload["modified_site_by_target_id"] = rec.target_id
+        payload["modified_site_by_target_id"] = dc.target_id
         payload["purpose"] = rec.purpose   # Required
 
         # Note that CrisprConstruct can also has_many construct_tags. Those are not part of the donor
@@ -221,10 +220,10 @@ class Submit():
                 # The Portal, however, only has eGFP and it makes most sense to submit this as 
                 # simply eGFP and mention the linker used elsewhere. 
                 tag = "eGFP"
-            introduced_tags.append({"name": tag, "location": "C-terminal"}])
+            introduced_tags.append({"name": tag, "location": "C-terminal"})
         payload["introduced_tags"] = introduced_tags
         reagents = []
-        for i in ccs.extend(dc):
+        for i in [*ccs,dc]:
             addgene_id = getattr(i, "addgene_id")
             if addgene_id:
                 uri = "http://www.addgene.org/" + addgene_id
@@ -269,12 +268,13 @@ class Submit():
         upstreams = []
         for i in rec_ids:
             upstreams.append(self.post_document(rec_id=i, patch=patch))
-        return upstream_ids
+        return upstreams
 
     def post_treatments(self, rec_ids, patch=False):
         upstreams = []
+        for i in rec_ids:
             upstreams.append(self.post_treatment(rec_id=i, patch=patch))
-        return upstream_ids
+        return upstream
 
     def post_treatment(self, rec_id, patch=False):
         rec = models.Treatment(rec_id)
