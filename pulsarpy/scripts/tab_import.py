@@ -67,6 +67,8 @@ def main():
     # Check for invalid attribute names
     for f in field_positions:
         attr_name = header[f]
+        if attr_name == RECORD_ID_FIELD:
+            continue
         if attr_name not in model.FKEY_MAP:
             if attr_name not in model_attrs:
                 raise Exception(f"Unknown field name '{attr_name}'.")
