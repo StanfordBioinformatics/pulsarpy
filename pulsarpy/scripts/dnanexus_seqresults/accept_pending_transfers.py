@@ -27,7 +27,9 @@ import json
 
 import dxpy
 
-import scgpm_seqresults_dnanexus.dnanexus_utils
+import pulsarpy.models
+import scgpm_seqresults_dnanexus.dnanexus_utils as du
+
 
 #The environment module gbsc/gbsc_dnanexus/current should also be loaded in order to log into DNAnexus
 
@@ -62,16 +64,35 @@ def main():
     logger.addHandler(err_h)
 
     #accept pending transfers
-    transferred = scgpm_seqresults_dnanexus.dnanexus_utils.accept_project_transfers(dx_username=DX_USER,access_level="ADMINISTER",queue="ENCODE",org=ENCODE_ORG,share_with_org="CONTRIBUTE")
+    transferred = du.accept_project_transfers(dx_username=DX_USER,access_level="ADMINISTER",queue="ENCODE",org=ENCODE_ORG,share_with_org="CONTRIBUTE")
     #transferred is a dict. identifying the projects that were transferred to the specified billing account. Keys are the project IDs, and values are the project names.
     logger.debug("The following projects were transferred to {org}:".format(org=ENCODE_ORG))
     logger.debug(transferred)
     
-    if transferred: #will be an empty dict otherwise.
-    	transferred_proj_ids = transferred.keys()
-        for t in transferred_proj_ids:
-            # Find pulsar SReq with library_name
-            # upload results to Pulsar
+    if not transferred: #will be an empty dict otherwise.
+        return
+    transferred_proj_ids = transferred.keys()
+    for t in transferred_proj_ids:
+        dxres = du.DxSeqResults(dx_project_id=t)
+        proj_props = dxres.dx_project.describe(input_params={"properties": True})["properties"]
+        library_name = proj_props["library_name"]
+        # First search by name, then by ID if the former fails.
+        # Lab members submit a name by the name of SREQ-ID, where SREQ is Pulsar's 
+        # abbreviation for the SequencingRequest model, and ID is the database ID of a
+        # SequencingRequest record. This gets stored into the library_name property of the 
+        # corresponding DNanexus project. Problematically, this was also done in the same way when
+        # we were on Syapse, and we have backported some Sypase sequencing requests into Pulsar. Such
+        # SequencingRequests have been given the name as submitted in Syapse times, and this is
+        # evident when the SequencingRequest's ID is different from the ID in the SREQ-ID part. 
+        # Find pulsar SequencingRequest with library_name
+        sreq = ppy_models.SequencingRequest.find_by({"name": library_name})
+        if not sreq:
+            # Search by ID. The lab sometimes doen't add a value for SequencingRequest.name.
+            sreq = ppy_models.SequencingRequest.find_by("id": library_name.split("-")[1])
+        if not sreq:
+            logger.debug("Can't find Pulsar SequencingRequest for DNAnexus project {} ({}).".format(t, dxres.name))
+
+        # upload results to Pulsar
         
          
 

@@ -6,6 +6,7 @@
 #nathankw@stanford.edu
 ###
 
+SREQ_STATUSES = ["not started", "started", "trouble-shooting", "failed", "finished"]
 
 def fahrenheit_to_celsius(temp):
     return (temp - 32) * (5.0/9)
@@ -39,3 +40,11 @@ def get_exp_of_biosample(biosample_rec):
     elif ssc_id:
         return models.SingleCellSorting(ssc_id)
     raise Exception("Biosample {} is not on an experiment.".format(biosample_rec["id"]))
+
+def sreqs_by_status(status):
+    """
+    Returns an array of all SequencingRequest objects whose status attribute is set to the specified
+    state. Status must be one of {}.
+    """.format(SREQ_STATUSES)
+    pass
+    
