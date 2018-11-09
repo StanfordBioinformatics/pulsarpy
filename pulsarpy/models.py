@@ -497,6 +497,12 @@ class Model(metaclass=Meta):
                 payload[key] = rec_ids
         return payload
 
+
+    @classmethod
+    def prepost_hooks(cls, payload):
+        return payload
+    
+
     @classmethod
     def post(cls, payload):
         """Posts the data to the specified record.
@@ -516,6 +522,8 @@ class Model(metaclass=Meta):
         payload = cls.set_id_in_fkeys(payload)
         payload = cls.check_boolean_fields(payload)
         payload = cls.add_model_name_to_payload(payload)
+        # Run any pre-post hooks:
+        payload = cls.prepost_hooks(payload)
         cls.debug_logger.debug("POSTING payload {}".format(json.dumps(payload, indent=4)))
         res = requests.post(url=cls.URL, data=json.dumps(payload), headers=HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")

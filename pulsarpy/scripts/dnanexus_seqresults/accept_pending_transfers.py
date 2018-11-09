@@ -85,16 +85,59 @@ def main():
         # SequencingRequests have been given the name as submitted in Syapse times, and this is
         # evident when the SequencingRequest's ID is different from the ID in the SREQ-ID part. 
         # Find pulsar SequencingRequest with library_name
-        sreq = ppy_models.SequencingRequest.find_by({"name": library_name})
+        sreq = ppy_models.SequencingRequest(library_name})
         if not sreq:
             # Search by ID. The lab sometimes doen't add a value for SequencingRequest.name.
-            sreq = ppy_models.SequencingRequest.find_by("id": library_name.split("-")[1])
+            sreq = ppy_models.SequencingRequest(library_name.split("-")[1])
         if not sreq:
             logger.debug("Can't find Pulsar SequencingRequest for DNAnexus project {} ({}).".format(t, dxres.name))
+        # Check if there is a SequencingRun object for this already
+        srun = models.SequencingRun(...)
+        if srun.status != "finished":
+            srun.patch({"status": "finished"})
+        if not srun.data_storage_id:
+            ds_json = create_data_storage(srun, dxres)
+        # Now create SequencingRun object
+        payload = {}
+        payload["data_storage_id"] =
+        payload["lane"] = proj_props["seq_lane_index"]
+        payload["name"] = proj_props["seq_run_name"]
 
-        # upload results to Pulsar
+def create_srun(sres, dxres):
+    """
+    Creates a SequencingRun record to be linked to the given SequencingResult object. 
+    """
         
-         
+def create_data_storage(srun, dxres):
+    """
+    Creates a DataStorage record for the given SequencingRun record based on the given DNAnexus 
+    sequencing results. After the DataStorage record is created, a few attribuets of the SequencingRun
+    object will then be set:
+
+        1. SequencingRun.data_storage_id: Link to newly creatd DataStroage record.
+        2. SequencingRun.lane: Set to the value of the DNAnexus project property "seq_lane_index". 
+
+    key in the SequeningRun record. 
+
+    Args: 
+        srun - A `pulsarpy.models.SequencingRun` instance whose `data_storage_id` foreign key 
+               should be associated with the newly created DataStorage.
+        dxres - `scgpm_seqresults_dnanexus.dnanexus_utils.du.DxSeqResults()` instance that contains
+               sequencing results metadata in DNAnexus for the given srun. 
+    
+    Returns:
+        `dict`. The response from the server containing the JSON serialization of the new 
+            DataStorage record. 
+    """
+    payload = {}
+    payload["name"] = dxres.dx_project_name
+    payload["project_identifier"] = dxres.dx_project_id
+    payload["data_storage_provider_id"] = models.DataStorage("DNAnexus")["id"]
+    # Create DataStorage
+    res_json = models.DataStorage.post(ds_payload)
+    # Udate srun's data_storage_id fkey:
+    srun.patch({"data_storage_id": res_json["id"], "lane": dxres.dx_project_props["seq_lane_index"]})
+    return res_json
 
 if __name__ == "__main__":
     main()
