@@ -91,22 +91,30 @@ def main():
             sreq = ppy_models.SequencingRequest(library_name.split("-")[1])
         if not sreq:
             logger.debug("Can't find Pulsar SequencingRequest for DNAnexus project {} ({}).".format(t, dxres.name))
+            continue
         # Check if there is a SequencingRun object for this already
         srun = models.SequencingRun(...)
-        if srun.status != "finished":
-            srun.patch({"status": "finished"})
+        if not srun:
+            # Create SequencingRun
+            srun_json = create_srun(sreq, dxres)
+            srun = models.SequencingRun(srun_json["id"])
+        # Check if DataStorage is aleady linked to SequencingRun object. May be if user created it
+        # manually in the past. 
         if not srun.data_storage_id:
             ds_json = create_data_storage(srun, dxres)
-        # Now create SequencingRun object
-        payload = {}
-        payload["data_storage_id"] =
-        payload["lane"] = proj_props["seq_lane_index"]
-        payload["name"] = proj_props["seq_run_name"]
+        if srun.status != "finished":
+            srun.patch({"status": "finished"})
 
-def create_srun(sres, dxres):
+def create_srun(sreq, dxres):
     """
     Creates a SequencingRun record to be linked to the given SequencingResult object. 
     """
+    payload = {}
+    payload["name"] = proj_props["seq_run_name"]
+    payload["sequencing_request_id"] = sreq.id
+    # 'status' is a required attribute. Set initially to 'started'; it will be set to finished
+    # a step later when creating the associated DataStorage record.
+    return models.SequencingRun.post(payload)
         
 def create_data_storage(srun, dxres):
     """
@@ -114,8 +122,14 @@ def create_data_storage(srun, dxres):
     sequencing results. After the DataStorage record is created, a few attribuets of the SequencingRun
     object will then be set:
 
-        1. SequencingRun.data_storage_id: Link to newly creatd DataStroage record.
-        2. SequencingRun.lane: Set to the value of the DNAnexus project property "seq_lane_index". 
+        1. `SequencingRun.data_storage_id`: Link to newly creatd DataStroage record.
+        2. `SequencingRun.lane`: Set to the value of the DNAnexus project property "seq_lane_index". 
+        3. `SequencingRun.status`: Set to "finished". 
+
+
+     Note that I would also like to try and set the attributes `SequencingRun.forward_read_len` and
+     `SequencingRun.reverse_read_len`, however, I can't obtain these results from DNAnexus based on
+     the existing metadata that's sent there via GSSC. 
 
     key in the SequeningRun record. 
 
