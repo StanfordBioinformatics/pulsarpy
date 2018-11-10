@@ -75,7 +75,7 @@ def main():
     for t in transferred_proj_ids:
         dxres = du.DxSeqResults(dx_project_id=t)
         proj_props = dxres.dx_project.describe(input_params={"properties": True})["properties"]
-        library_name = proj_props["library_name"]
+        lib_name_prop = proj_props["library_name"]
         # First search by name, then by ID if the former fails.
         # Lab members submit a name by the name of SREQ-ID, where SREQ is Pulsar's 
         # abbreviation for the SequencingRequest model, and ID is the database ID of a
@@ -84,14 +84,16 @@ def main():
         # we were on Syapse, and we have backported some Sypase sequencing requests into Pulsar. Such
         # SequencingRequests have been given the name as submitted in Syapse times, and this is
         # evident when the SequencingRequest's ID is different from the ID in the SREQ-ID part. 
-        # Find pulsar SequencingRequest with library_name
+        # Find pulsar SequencingRequest:
         sreq = ppy_models.SequencingRequest(library_name})
         if not sreq:
-            # Search by ID. The lab sometimes doen't add a value for SequencingRequest.name.
+            # Search by ID. The lab sometimes doesn't add a value for SequencingRequest.name.
             sreq = ppy_models.SequencingRequest(library_name.split("-")[1])
         if not sreq:
             logger.debug("Can't find Pulsar SequencingRequest for DNAnexus project {} ({}).".format(t, dxres.name))
             continue
+        check_pairedend_correct(sreq, dxres.dx_project_properties["paired_end"])
+            
         # Check if there is a SequencingRun object for this already
         srun = models.SequencingRun(...)
         if not srun:
@@ -104,6 +106,62 @@ def main():
             ds_json = create_data_storage(srun, dxres)
         if srun.status != "finished":
             srun.patch({"status": "finished"})
+        
+        # Create SequencingResult record for each library on the SReq
+        for library_id in sreq.library_ids:
+            library = models.Library(library_id)
+            barcode = library.get_barcode_sequence()
+            # Find the barcode file on DNAnexus
+            barcode_files = dxres.get_fastq_files_props(barcode=barcode)
+            # Above - keys are the FASTQ file DXFile objects; values are the dict of associated properties 
+            # on DNAnexus on the file. In addition to the properties on the file in DNAnexus, an 
+            # additional property is added here called 'fastq_file_name'.
+
+            # Download sample_stats.json to get mapped read counts
+            sample_stats = dxres.get_sample_stats_json(barcode=barcode)
+            for dxfile in barcode_files:
+                props = barcode_files[dxfile]
+                read_num = int(props["read"])
+                if not read_num in [1, 2]:
+                    raise Exception("Unknown read number '{}'. Should be either 1 or 2.".format(read_num))
+                payload = {}
+                payload["library_id"] = library_id
+                payload["sequencing_run_id"] = srun.id
+                
+                if read_num == 1:
+                    payload["read1_uri"] = dxfile.project + ":" + dxfile.id   
+                    read_stats = get_read_stats(sample_stats, read_num=1)
+                    payload["read1_count"] = read_counts["pass_filter"]
+                else:
+                    payload["read2_uri"] = dxfile.project + ":" + dxfile.id   
+                    read_stats = get_read_stats(sample_stats, read_num=2)
+                    payload["read2_count"] = read_counts["pass_filter"]
+                models.SequencingResult.post(payload)
+             
+  
+def check_pairedend_correct(sreq, dx_pe_val):
+    """
+    Checks whether the SequencingRequest.paired_end attribute and the 'paired' property of the 
+    DNAnexus project in question are in accordance. It's possible that the request originally went
+    in as SE (or the tech forgot to check PE), but the sequencing run was acutally done PE. If this
+    is the case, then the SequencingRequest.paired_end attribute will be set to True in order that
+    PE sequencing results will be allowed (PE attributes of a SequencingResult will be hidden in the
+    UI if the SequencingRequest is set to paired_end being false).  
+
+    Args:
+        sreq: A `pulsarpy.models.SequencingRequest` instance.
+        dx_pe_val: `str`. The value of the 'paired' property of the DNAnexus project in questions. 
+    """
+    if sreq.paired_end == False:
+        if dx_pe_val == "true":
+            sreq.patch({"paired_end": True})
+                
+def get_read_stats(sample_stats, read_num):
+    read_stats = {}
+    read_num_key = "Read {}".format(read_num)
+    read_stats["pass_filter"] = sample_stats[read_num_key]["Post-Filter Reads"]
+    return pf_reads
+
 
 def create_srun(sreq, dxres):
     """

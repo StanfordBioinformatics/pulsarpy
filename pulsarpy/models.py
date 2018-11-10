@@ -734,6 +734,13 @@ class Library(Model):
     # has_many
     FKEY_MAP["document_ids"] = "Document"
 
+    def get_barcode_sequence(self):
+        if self.barcode_id:
+            return Barcode(self.barcode_id).sequence
+        elif self.paired_barcode_id:
+            return PairedBarcode(self.paired_barcode_id).sequence
+        return
+
 
 class LibraryFragmentationMethod(Model):
     MODEL_ABBR = "LFM"
