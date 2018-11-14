@@ -90,6 +90,8 @@ def main():
         # Find pulsar SequencingRequest:
 
         #sreq = ppy_models.SequencingRequest.find_by(payload={"name": library_name})
+        # Using Elasticsearch here mainly in order to achieve a case-insensitive search on the SequencingRequest
+        # name field. 
         search_result = es_client.search(
             index="biosamples",
             body={
