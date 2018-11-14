@@ -26,18 +26,15 @@ import argparse
 import json
 
 import dxpy
-from elasticsearch import Elasticsearch
 
 import pulsarpy.models
+import pulsarpy.elasticsearch
 import scgpm_seqresults_dnanexus.dnanexus_utils as du
 
 
 #The environment module gbsc/gbsc_dnanexus/current should also be loaded in order to log into DNAnexus
 
 ENCODE_ORG = "org-snyder_encode"
-
-es_client = Elasticsearch(os.environ["ES_URL"], http_auth=(os.environ["ES_USER"], os.environ["ES_PW"]))
-
 
 def get_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
@@ -66,6 +63,10 @@ def main():
     err_h.setFormatter(formatter)
     logger.addHandler(err_h)
 
+    def log_error(msg):
+        logger.debug(msg)
+        logger.error(msg)
+
     #accept pending transfers
     transferred = du.accept_project_transfers(dx_username=DX_USER,access_level="ADMINISTER",queue="ENCODE",org=ENCODE_ORG,share_with_org="CONTRIBUTE")
     #transferred is a dict. identifying the projects that were transferred to the specified billing account. Keys are the project IDs, and values are the project names.
@@ -89,30 +90,20 @@ def main():
         # evident when the SequencingRequest's ID is different from the ID in the SREQ-ID part.
         # Find pulsar SequencingRequest:
 
-        #sreq = ppy_models.SequencingRequest.find_by(payload={"name": library_name})
+        #sreq = ppy_models.SequencingRequest.find_by(payload={"name": lib_name_prop})
         # Using Elasticsearch here mainly in order to achieve a case-insensitive search on the SequencingRequest
         # name field. 
-        search_result = es_client.search(
-            index="biosamples",
-            body={
-                "query": {
-                    "match_phrase": {
-                        "name": library_name,
-                    }
-                }
-            }
-        )
-        hits = search_result["hits"]["hits"]
-        if hits:
-            if len(hits) > 1:
-                logger.debug("Found multiple SequencingRequest records with name '{}'. Skipping DNAnexus project {} ({}) with library_name property set to '{}'".format(t, dxres.name, library_name))
-            sreq = ppy_models.SequencingRequest(hits[0]["_source"]["id"])
-        else:
+        try:
+            sreq = ppy_models.SequncingRequest(lib_name_prop) 
+        except pulsarpy.elasticsearch.MultipleHitsException as e:
+            log_error("Found multiple SequencingRequest records with name '{}'. Skipping DNAnexus project {} ({}) with library_name property set to '{}'".format(lib_name_prop, t, dxres.name))
+            continue
+        except ppy_models.RecordNotFound as e:
             # Search by ID. The lab sometimes doesn't add a value for SequencingRequest.name.
             sreq = ppy_models.SequencingRequest(library_name.split("-")[1])
-        if not sreq:
-            logger.debug("Can't find Pulsar SequencingRequest for DNAnexus project {} ({}) with library_name property set to '{}'. Skipping.".format(t, dxres.name, library_name))
-            continue
+            if not sreq:
+                log_error("Can't find Pulsar SequencingRequest for DNAnexus project {} ({}) with library_name property set to '{}'. Skipping.".format(t, dxres.name, library_name))
+                continue
         check_pairedend_correct(sreq, dxres.dx_project_properties["paired_end"])
         seq_run_name = proj_props["seq_run_name"]
         srun = get_or_create_srun(sreq, seq_run_name, dxres)

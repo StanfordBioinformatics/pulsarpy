@@ -25,6 +25,7 @@ import urllib3
 import pdb
 
 import pulsarpy as p
+import pulsarpy.elasticsearch_utils
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -144,7 +145,11 @@ class Meta(type):
         logger.addHandler(handler)
 
     def __init__(newcls, classname, supers, classdict):
+        #: Used primarily for setting the lower-cased and underscored model name in the payload
+        #: for post and patch operations. 
         newcls.MODEL_NAME = inflection.underscore(newcls.__name__)
+        #: Elasticsearch index name for the Pulsar model.
+        newcls.ES_INDEX_NAME = inflection.pluralize(newcls.MODEL_NAME)
         newcls.URL = os.path.join(p.URL, inflection.pluralize(newcls.MODEL_NAME))
 
 
@@ -216,7 +221,7 @@ class Model(metaclass=Meta):
         Args:
             uid: The database identifier of the record to fetch, which can be specified either as the
                 primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
-                rec_id could also be the record's name if it has a name attribute (not all models do)
+                Could also be the record's name if it has a name attribute (not all models do)
                 and if so will be converted to the record ID.
             upstream: If set, then the record will be searched on its upstream_identifier attribute. 
         """
@@ -226,13 +231,14 @@ class Model(metaclass=Meta):
         # rec_id could be the record's name. Check for that scenario, and convert to record ID if
         # necessary.
         if uid:
-            self.rec_id = Model.replace_name_with_id(self.__class__, uid)
+            rec_id = self.__class__.replace_name_with_id(uid)
+            rec_json = self._get(rec_id=rec_id)
         elif upstream:
-            self.rec_id = Model.find_by({"upstream_identifier": upstream})["id"]
+            rec_json = self._get(upstream=upstream)
         else:
             raise ValueError("Either the 'uid' or 'upstream' parameter must be set.")
-        self.record_url = os.path.join(self.URL, str(self.rec_id))
-        self.__dict__["attrs"] = self._get() #avoid call to self.__setitem__() for this attr.
+        self.rec_id = rec_json["id"]
+        self.__dict__["attrs"] = rec_json #avoid call to self.__setitem__() for this attr.
 
     def __getattr__(self, name):
         """
@@ -251,14 +257,25 @@ class Model(metaclass=Meta):
         #self.__dict__["attrs"][name] = value #this works too
 
 
-    def _get(self):
-        """Fetches a record by the record's ID.
+    def _get(self, rec_id=None, upstream=None):
         """
-        self.debug_logger.debug("GET {} record with ID {}: {}".format(self.__class__.__name__, self.rec_id, self.record_url))
-        res = requests.get(url=self.record_url, headers=HEADERS, verify=False)
-        self.write_response_html_to_file(res,"get_bob.html")
-        res.raise_for_status()
-        return res.json()
+        Fetches a record by the record's ID or upstream_identifier.
+
+        Raises:
+            `pulsarpy.models.RecordNotFound`: A record could not be found.
+        """
+        if rec_id:
+            record_url = os.path.join(self.URL, str(rec_id))
+            self.debug_logger.debug("GET {} record with ID {}: {}".format(self.__class__.__name__, rec_id, record_url))
+            response = requests.get(url=record_url, headers=HEADERS, verify=False)
+            if not response.ok and response.status_code == requests.codes.NOT_FOUND:
+                raise RecordNotFound("Search for {} record with ID '{}' returned no results.".format(self.__class__.__name__, rec_id))
+            self.write_response_html_to_file(response,"get_bob.html")
+            response.raise_for_status()
+            return response.json()
+        elif upstream:
+            rec_json = self.__class__.find_by({"upstream_identifier": upstream}, require=True)
+        return rec_json
 
     @classmethod
     def log_post(cls, res_json):
@@ -269,19 +286,28 @@ class Model(metaclass=Meta):
         cls.post_logger.info(msg)
 
     @classmethod
-    def replace_name_with_id(cls, model, name):
+    def replace_name_with_id(cls, name):
         """
-        Used to replace a foreign key reference using a name with an ID.
+        Used to replace a foreign key reference using a name with an ID. Works by searching the
+        record in Pulsar and expects to find exactly one hit. First, will check if the foreign key
+        reference is an integer value and if so, returns that as it is presumed to be the foreign key.
+
+        Raises:
+            `pulsarpy.elasticsearch_utils.MultipleHitsException`: Multiple hits were returned from the name search. 
+            `pulsarpy.models.RecordNotFound`: No results were produced from the name search. 
         """
         try:
             int(name)
             return name #Already a presumed ID.
         except ValueError:
-            #Not an int, so maybe a name. Look up Biosample record
-            b = model.find_by({"name": name})
-            if not b:
-                raise RecordNotFound("Name '{}' for model '{}' not found.".format(name, model.__class__.__name__))
-            return b["id"]
+            #Not an int, so maybe a name.
+            try:                                                                                        
+                result = pulsarpy.elasticsearch_utils.get_record_by_name(cls.ES_INDEX_NAME, name)          
+                if result:
+                    return result["id"]
+            except pulsarpy.elasticsearch_utils.MultipleHitsException as e:  
+                raise
+            raise RecordNotFound("Name '{}' for model '{}' not found.".format(name, model.__class__.__name__))
     
 
     @classmethod
@@ -352,7 +378,7 @@ class Model(metaclass=Meta):
         return res.json()
 
     @classmethod
-    def find_by(cls, payload):
+    def find_by(cls, payload, require=False):
         """
         Searches the model in question by AND joining the query parameters.
 
@@ -362,10 +388,16 @@ class Model(metaclass=Meta):
 
         Args:
             payload: `dict`. The attributes of a record to restrict the search to.
+            require: `bool`. True means to raise a `pulsarpy.models.RecordNotFound` exception if no
+                record is found.
 
         Returns:
             `dict`: The JSON serialization of the record, if any, found by the API call.
-            `None`: If the API call didnt' return any results.
+            `None`: If the API call didnt' return any results and the `found` parameter is False. 
+
+        Raises:
+            `pulsarpy.models.RecordNotFound`: No records were found, and the `require` parameter is
+                True. 
         """
         if not isinstance(payload, dict):
             raise ValueError("The 'payload' parameter must be provided a dictionary object.")
@@ -374,6 +406,7 @@ class Model(metaclass=Meta):
         cls.debug_logger.debug("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
         res = requests.post(url=url, data=json.dumps(payload), headers=HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
+        res.raise_for_status()
         res_json = res.json()
         if res_json:
            try:
@@ -381,6 +414,9 @@ class Model(metaclass=Meta):
            except KeyError:
                # Key won't be present if there isn't a serializer for it on the server.
                pass
+        else:
+            if require:
+                raise RecordNotFound("Can't find any {} records with search criteria: '{}'.".format(cls.__name__, payload))
         return res_json
 
     @classmethod
@@ -486,13 +522,13 @@ class Model(metaclass=Meta):
                continue
             if key.endswith("_id"):
                 model = getattr(THIS_MODULE, cls.FKEY_MAP[key])
-                rec_id = cls.replace_name_with_id(model=model, name=val)
+                rec_id = cls.replace_name_with_id(name=val)
                 payload[key] = rec_id
             elif key.endswith("_ids"):
                 model = getattr(THIS_MODULE, cls.FKEY_MAP[key])
                 rec_ids = []
                 for v in val:
-                   rec_id = cls.replace_name_with_id(model=model, name=v)
+                   rec_id = cls.replace_name_with_id(name=v)
                    rec_ids.append(rec_id)
                 payload[key] = rec_ids
         return payload
@@ -679,7 +715,7 @@ class CrisprModification(Model):
     FKEY_MAP["user_id"] = "User"
 
     def clone(self, biosample_id):
-       biosample_id = Model.replace_name_with_id(model=Biosample, name=biosample_id)
+       biosample_id = self.__class__.replace_name_with_id(name=biosample_id)
        url = self.record_url +  "/clone"
        self.debug_logger.debug("Cloning with URL {}".format(url))
        payload = {"biosample_id": biosample_id}
