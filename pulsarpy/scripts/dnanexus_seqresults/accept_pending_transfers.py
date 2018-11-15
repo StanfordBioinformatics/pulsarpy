@@ -99,7 +99,9 @@ def main():
             log_error("Found multiple SequencingRequest records with name '{}'. Skipping DNAnexus project {} ({}) with library_name property set to '{}'".format(lib_name_prop, t, dxres.name))
             continue
         except ppy_models.RecordNotFound as e:
-            # Search by ID. The lab sometimes doesn't add a value for SequencingRequest.name.
+            # Search by ID. The lab sometimes doesn't add a value for SequencingRequest.name and
+            # instead uses the SequencingRequest record ID, which is a concatenation of the model
+            # abbreviation, a hyphen, and the records primary ID. 
             sreq = ppy_models.SequencingRequest(library_name.split("-")[1])
             if not sreq:
                 log_error("Can't find Pulsar SequencingRequest for DNAnexus project {} ({}) with library_name property set to '{}'. Skipping.".format(t, dxres.name, library_name))
@@ -110,7 +112,8 @@ def main():
         # Check if DataStorage is aleady linked to SequencingRun object. May be if user created it
         # manually in the past.
         if not srun.data_storage_id:
-            ds_json = create_data_storage(srun, dxres)
+            ds_json = create_data_storage(dxres)
+            srun.patch({"data_storage_id": ds_json["id"]})
         if srun.status != "finished":
             srun.patch({"status": "finished"})
 
@@ -122,9 +125,9 @@ def main():
             barcode_files = dxres.get_fastq_files_props(barcode=barcode)
             # Above - keys are the FASTQ file DXFile objects; values are the dict of associated properties
             # on DNAnexus on the file. In addition to the properties on the file in DNAnexus, an
-            # additional property is added here called 'fastq_file_name'.
+            # additional property is present called 'fastq_file_name'.
 
-            # Download sample_stats.json to get mapped read counts
+            # Read sample_stats.json to get mapped read counts for the given barcode:
             sample_stats = dxres.get_sample_stats_json(barcode=barcode)
             for dxfile in barcode_files:
                 props = barcode_files[dxfile]
@@ -138,11 +141,11 @@ def main():
                 if read_num == 1:
                     payload["read1_uri"] = dxfile.project + ":" + dxfile.id
                     read_stats = get_read_stats(sample_stats, read_num=1)
-                    payload["read1_count"] = read_counts["pass_filter"]
+                    payload["read1_count"] = read_stats["pass_filter"]
                 else:
                     payload["read2_uri"] = dxfile.project + ":" + dxfile.id
                     read_stats = get_read_stats(sample_stats, read_num=2)
-                    payload["read2_count"] = read_counts["pass_filter"]
+                    payload["read2_count"] = read_stats["pass_filter"]
                 models.SequencingResult.post(payload)
 
 def check_pairedend_correct(sreq, dx_pe_val):
@@ -150,9 +153,9 @@ def check_pairedend_correct(sreq, dx_pe_val):
     Checks whether the SequencingRequest.paired_end attribute and the 'paired' property of the
     DNAnexus project in question are in accordance. It's possible that the request originally went
     in as SE (or the tech forgot to check PE), but the sequencing run was acutally done PE. If this
-    is the case, then the SequencingRequest.paired_end attribute will be set to True in order that
-    PE sequencing results will be allowed (PE attributes of a SequencingResult will be hidden in the
-    UI if the SequencingRequest is set to paired_end being false).
+    is the case, then the SequencingRequest.paired_end attribute will be updated to be set to True   
+    in order that PE sequencing results will be allowed (PE attributes of a SequencingResult will 
+    be hidden in the UI if the SequencingRequest is set to paired_end being false).
 
     Args:
         sreq: A `pulsarpy.models.SequencingRequest` instance.
@@ -183,25 +186,28 @@ def get_read_stats(sample_stats, read_num):
 
 def get_or_create_srun(sreq, seq_run_name, dxres):
     """
-    Given a SequencingRequest record, checks to see if it has any SequencingRequests associated with
-    a name equal to the sequencing run name. If so, returns it, otherwise, creates a new sequencing
-    run record based off of the provided DNAnexus sequencing results.
+    Given a SequencingRequest record, checks to see if it has a SequencingRuns with a name that is
+    equal to the specified sequencing run name (case-insensitive), or if it has a SequencingRun 
+    with a DataStorage.project_identifier equal to that wrapped in the given DNAnexus sequencing
+    results object. If so, returns it, otherwise, creates a new sequencing run record based off of 
+    the provided DNAnexus sequencing results.
 
     Args:
         sreq: `pulsarpy.models.SequencingRequest` instance.
-        seq_run_name: `str`. Typically, the value of a DNAnexus project property called "seq_run_name".
+        seq_run_name: `str`. Typically, the value of the DNAnexus project property called "seq_run_name".
         dxres - `scgpm_seqresults_dnanexus.dnanexus_utils.du.DxSeqResults()` instance that contains
-               sequencing results metadata in DNAnexus that represents a sequencing run of the given
+               sequencing results metadata from DNAnexus that represents a sequencing run of the given
                `pulsarpy.models.SequencingRequest`.
     Returns:
         `pulsarpy.models.SequencingRun` instance.
     """
+    seq_run_name = seq_run_name.lower()
     srun_ids = sreq.sequencing_run_ids
     if srun_ids:
         for i in srun_ids:
             srun = models.SequencingRun(i)
-            # Check by name
-            if srun.name == seq_run_name:
+            # Check by name, case-insensitive.
+            if srun.name.lower() == seq_run_name
                 return srun
             # Also check by DataStorage
             elif srun.data_storage_id:
@@ -217,16 +223,22 @@ def create_srun(sreq, dxres):
     """
     Creates a SequencingRun record based on the provided DNAnexus sequencing results, to be linked
     to the given SequencingRequest object.
+
+    Args:
+        sreq: A `pulsarpy.models.SequencingRequest` instance.
+        dxres: `scgpm_seqresults_dnanexus.dnanexus_utils.du.DxSeqResults()` instance that contains
+               sequencing results metadata in DNAnexus for the given srun.
     """
+    data_storage_json = create_data_storage(dxres)
     payload = {}
     payload["name"] = proj_props["seq_run_name"]
     payload["sequencing_request_id"] = sreq.id
-    payload["status"] = "started"
-    # 'status' is a required attribute. Set initially to 'started'; it will be set to finished
-    # a step later when creating the associated DataStorage record.
+    payload["status"] = "finished"
+    payload["data_storage_id"]	= data_storage_json["id"]
+    payload["lane"] = dxres.dx_project_props["seq_lane_index"]})
     return models.SequencingRun.post(payload)
 
-def create_data_storage(srun, dxres):
+def create_data_storage(dxres):
     """
     Creates a DataStorage record for the given SequencingRun record based on the given DNAnexus
     sequencing results. After the DataStorage record is created, a few attribuets of the SequencingRun
@@ -244,8 +256,6 @@ def create_data_storage(srun, dxres):
     key in the SequeningRun record.
 
     Args:
-        srun: `pulsarpy.models.SequencingRun` instance whose `data_storage_id` foreign key
-               should be associated with the newly created DataStorage.
         dxres: `scgpm_seqresults_dnanexus.dnanexus_utils.du.DxSeqResults()` instance that contains
                sequencing results metadata in DNAnexus for the given srun.
 
@@ -259,8 +269,6 @@ def create_data_storage(srun, dxres):
     payload["data_storage_provider_id"] = models.DataStorage("DNAnexus")["id"]
     # Create DataStorage
     res_json = models.DataStorage.post(ds_payload)
-    # Udate srun's data_storage_id fkey:
-    srun.patch({"data_storage_id": res_json["id"], "lane": dxres.dx_project_props["seq_lane_index"]})
     return res_json
 
 if __name__ == "__main__":
