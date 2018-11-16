@@ -172,6 +172,8 @@ class Model(metaclass=Meta):
         1) PULSAR_API_URL
         2) PULSAR_TOKEN
     """
+    #: Connect to Elasticsearch
+    ES = pulsarpy.elasticsearch_utils.Connection()
     #: Most models have an attribute alled upstream_identifier that is used to store the value of the
     #: record in an "upstream" database that is submitted to, i.e. the ENCODE Portal. Not all models
     #: have this attribute since not all are used for submission to an upstream portal. 
@@ -308,7 +310,7 @@ class Model(metaclass=Meta):
         except ValueError:
             #Not an int, so maybe a name.
             try:                                                                                        
-                result = pulsarpy.elasticsearch_utils.get_record_by_name(cls.ES_INDEX_NAME, name)          
+                result = ES.get_record_by_name(cls.ES_INDEX_NAME, name)          
                 if result:
                     return result["id"]
             except pulsarpy.elasticsearch_utils.MultipleHitsException as e:  
