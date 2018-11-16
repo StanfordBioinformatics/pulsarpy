@@ -22,7 +22,8 @@ ALIASES_PROP = "aliases"
 UPSTREAM_PROP = "upstream_identifier"
 UUID_PROP = "uuid"
 ENC_CONN = euc.Connection("prod")
-ADMIN_USER_ID = models.User.find_by({"email": "admin@enc.com"})["id"]
+#ADMIN_USER_ID = models.User.find_by({"email": "admin@enc.com"})["id"]
+ADMIN_USER_ID = 1
 
 # Biosamples to import for Jessika:
 # https://www.encodeproject.org/search/?type=Biosample&lab.title=Michael+Snyder%2C+Stanford&award.rfa=ENCODE4&biosample_type=tissue
@@ -104,7 +105,7 @@ def biosample(rec_id, patch=False):
 
     Identifying properties on the Portal are "accession", "aliases", and "uuid".
     Portal's required props are: award, biosample_term_id, biosample_term_name, biosample_type lab,
-                                 organism, source
+    organism, source
 
     Args:
         rec_id: `str`. An identifier for a document record on the ENCODE Portal.

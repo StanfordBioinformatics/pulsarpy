@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-
 """
 Fetches the given experiment from the Portal in JSON format, and serializes it to tab-delimited
 format.

@@ -7,6 +7,8 @@
 ### 
 
 """
+The official Python client for Pulsar LIMS.
+
 Required Environment Variables:                                                                    
     1) PULSAR_API_URL                                                                              
     2) PULSAR_TOKEN

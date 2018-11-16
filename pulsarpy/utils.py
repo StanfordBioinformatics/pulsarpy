@@ -21,8 +21,10 @@ def get_exp_of_biosample(biosample_rec):
     is one of those two classes. The biosample is determined to be part of a ChipseqExperiment if the Biosample.chipseq_experiment_id
     attribute is set, meaning that the biosample can be associated to the ChipseqExperiment
     as a replicate via any of of the following ChipseqExperiment attributes:
+
         ChipseqExperiment.replicates
         ChipseqExperiment.control_replicates
+
     The biosample will be determined to be part of a SingleCellSorting experiment if the
     Biosample.sorting_biosample_single_cell_sorting attribute is set, meaning that it is the
     SingleCellSorting.sorting_biosample.
