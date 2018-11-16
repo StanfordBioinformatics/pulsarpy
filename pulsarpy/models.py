@@ -172,8 +172,6 @@ class Model(metaclass=Meta):
         1) PULSAR_API_URL
         2) PULSAR_TOKEN
     """
-    #: Connect to Elasticsearch
-    ES = pulsarpy.elasticsearch_utils.Connection()
     #: Most models have an attribute alled upstream_identifier that is used to store the value of the
     #: record in an "upstream" database that is submitted to, i.e. the ENCODE Portal. Not all models
     #: have this attribute since not all are used for submission to an upstream portal. 
@@ -233,6 +231,9 @@ class Model(metaclass=Meta):
                 and if so will be converted to the record ID.
             upstream: If set, then the record will be searched on its upstream_identifier attribute. 
         """
+        #: Connect to Elasticsearch
+        ES = pulsarpy.elasticsearch_utils.Connection()
+
         # self.attrs will store the actual record's attributes. Initialize value now to empty dict
         # since it is expected to be set already in self.__setattr__().
         self.__dict__["attrs"] = {}
