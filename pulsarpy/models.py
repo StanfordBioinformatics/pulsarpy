@@ -205,6 +205,12 @@ class Model(metaclass=Meta):
     post_logger.setLevel(log_level)
     Meta.add_file_handler(logger=post_logger, level=log_level, tag="posted")
     log_msg = "-----------------------------------------------------------------------------------"
+    
+    # Check if neccessary environment variables are set:
+    if not p.URL:
+        logger.debug("Warning: Environment variable PULSAR_API_URL not set.")
+    elif not p.PULSAR_TOKEN:
+        logger.debug("Warning: Environment variable PULSAR_API_TOKEN not set.")
     debug_logger.debug(log_msg) 
     error_logger.error(log_msg) 
     log_msg = f"Connecting to {p.URL}"
