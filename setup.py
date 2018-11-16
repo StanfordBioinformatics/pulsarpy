@@ -38,6 +38,7 @@ setup(
   long_description_content_type = "text/markdown",
   install_requires = [
     "elasticsearch-dsl",
+    "inflection",
     "requests",
   ],
   name = "pulsarpy",

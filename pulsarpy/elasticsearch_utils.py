@@ -19,11 +19,13 @@ class MultipleHitsException(Exception):
     pass
 
 class Connection():
-    ES_URL = os.environ["ES_URL"]
-    ES_USER = os.environ["ES_USER"]
-    ES_PW = os.environ["ES_PW"]
-    ES_AUTH = (ES_USER, ES_PW)
-    ES = Elasticsearch(ES_URL, http_auth=ES_AUTH)
+
+    def __init__(self):
+        ES_URL = os.environ["ES_URL"]
+        ES_USER = os.environ["ES_USER"]
+        ES_PW = os.environ["ES_PW"]
+        ES_AUTH = (ES_USER, ES_PW)
+        ES = Elasticsearch(ES_URL, http_auth=ES_AUTH)
 
 
     def get_record_by_name(self, index, name):
