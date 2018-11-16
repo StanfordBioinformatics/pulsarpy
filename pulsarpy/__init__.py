@@ -22,11 +22,11 @@ from urllib.parse import urlparse
 
 #: The directory that contains the log files created by the `Model` class.
 LOG_DIR = "Pulsarpy_Logs"
-URL = os.environ.get("PULSAR_API_URL")
+URL = os.environ.get("PULSAR_API_URL", "")
 HOST = ""
 if URL:
     HOST = urlparse(URL).hostname
-API_TOKEN = os.environ.get("PULSAR_TOKEN")
+API_TOKEN = os.environ.get("PULSAR_TOKEN", "")
 
 #: The name of the debug ``logging`` instance.
 DEBUG_LOGGER_NAME = "ppy_debug"
