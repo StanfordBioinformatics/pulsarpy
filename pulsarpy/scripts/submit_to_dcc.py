@@ -28,10 +28,10 @@ def get_parser():
         parents=[dcc_login_parser],
         formatter_class=argparse.RawTextHelpFormatter)
 
-    parser.add_argument("-p", "--profile-id", required=True, help=f"""                                  
+    parser.add_argument("-p", "--profile-id", required=True, help="""                                  
         The ID of the ENCODE profile to submit to, i.e. use 'genetic_modification' for                            
         https://www.encodeproject.org/profiles/genetic_modification.json. Must be a value from the set
-        {list(MODEL_PROFILE.keys())}""")
+        {}""".format(list(MODEL_PROFILE.keys()))
     parser.add_argument("-i", "--infile", required=True, help="""
         The input file containing Pulsar record identifiers, one per row. The record identifiers should belong to
         a Pulsar model that is the equivalent of the DCC profile specified by --profile-id.  For example,

@@ -213,7 +213,7 @@ class Model(metaclass=Meta):
         logger.debug("Warning: Environment variable PULSAR_API_TOKEN not set.")
     debug_logger.debug(log_msg) 
     error_logger.error(log_msg) 
-    log_msg = f"Connecting to {p.URL}"
+    log_msg = "Connecting to {}".format(p.URL)
     error_logger.error(log_msg)
     debug_logger.debug(log_msg) 
     

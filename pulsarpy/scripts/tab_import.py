@@ -71,7 +71,7 @@ def main():
             continue
         if attr_name not in model.FKEY_MAP:
             if attr_name not in model_attrs:
-                raise Exception(f"Unknown field name '{attr_name}'.")
+                raise Exception("Unknown field name '{}'.".format(attr_name))
     line_cnt = 1 # Already read header line
     for line in fh:
         line_cnt += 1
