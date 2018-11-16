@@ -1,3 +1,4 @@
 elasticsearch-dsl
+encode-utils
 inflection
 sphinx-argparse
