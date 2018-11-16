@@ -44,7 +44,7 @@ setup(
   packages = find_packages(),
   project_urls = {
       "Read the Docs": "",
-  }
+  },
   url = "https://github.com/StanfordBioinformatics/pulsarpy/wiki",
   scripts = scripts,
   version = "1.0.0",
