@@ -47,7 +47,7 @@ setup(
   project_urls = {
       "Read the Docs": "https://pulsarpy.readthedocs.io/en/latest",
   },
-  url = "https://github.com/StanfordBioinformatics/pulsarpy/wiki",
+  url = "https://github.com/nathankw/pulsarpy",
   scripts = scripts,
-  version = "1.0.0",
+  version = "1.0.0.post1",
 )
