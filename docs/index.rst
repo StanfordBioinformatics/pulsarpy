@@ -1,14 +1,9 @@
-.. ENCODE Utils documentation master file, created by
-   sphinx-quickstart on Thu Jan 18 20:14:44 2018.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 Pulsarpy
 ========================================
 
-This project read from GitHub_
+This project is read from GitHub_
 
-.. _GitHub: https://github.com/StanfordBioinformatics/encode_utils/wiki
+.. _GitHub: https://github.com/nathankw/pulsarpy
 
 Scripts
 -------

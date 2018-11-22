@@ -217,6 +217,10 @@ class Model(metaclass=Meta):
     error_logger.error(log_msg)
     debug_logger.debug(log_msg) 
     
+    #: Connection to Elasticsearch. Expects that the envrionment variables ES_URL, ES_USER, and 
+    #: ES_PW are set, which signifiy the Elasticsearch cluster URL, login username and login
+    #: password, respectively.
+    ES = pulsarpy.elasticsearch_utils.Connection()
 
     def __init__(self, uid=None, upstream=None):
         """
@@ -231,12 +235,10 @@ class Model(metaclass=Meta):
                 and if so will be converted to the record ID.
             upstream: If set, then the record will be searched on its upstream_identifier attribute. 
         """
-        #: Connect to Elasticsearch
-        ES = pulsarpy.elasticsearch_utils.Connection()
-
         # self.attrs will store the actual record's attributes. Initialize value now to empty dict
         # since it is expected to be set already in self.__setattr__().
         self.__dict__["attrs"] = {}
+
         # rec_id could be the record's name. Check for that scenario, and convert to record ID if
         # necessary.
         if uid:
@@ -311,12 +313,12 @@ class Model(metaclass=Meta):
         except ValueError:
             #Not an int, so maybe a name.
             try:                                                                                        
-                result = ES.get_record_by_name(cls.ES_INDEX_NAME, name)          
+                result = cls.ES.get_record_by_name(cls.ES_INDEX_NAME, name)          
                 if result:
                     return result["id"]
             except pulsarpy.elasticsearch_utils.MultipleHitsException as e:  
                 raise
-            raise RecordNotFound("Name '{}' for model '{}' not found.".format(name, model.__class__.__name__))
+            raise RecordNotFound("Name '{}' for model '{}' not found.".format(name, cls.__name__))
     
 
     @classmethod
@@ -531,17 +533,16 @@ class Model(metaclass=Meta):
                continue
             if key.endswith("_id"):
                 model = getattr(THIS_MODULE, cls.FKEY_MAP[key])
-                rec_id = cls.replace_name_with_id(name=val)
+                rec_id = model.replace_name_with_id(name=val)
                 payload[key] = rec_id
             elif key.endswith("_ids"):
                 model = getattr(THIS_MODULE, cls.FKEY_MAP[key])
                 rec_ids = []
                 for v in val:
-                   rec_id = cls.replace_name_with_id(name=v)
+                   rec_id = model.replace_name_with_id(name=v)
                    rec_ids.append(rec_id)
                 payload[key] = rec_ids
         return payload
-
 
     @classmethod
     def prepost_hooks(cls, payload):

@@ -23,7 +23,7 @@ import sys
 sys.path.append("../")
 
 #http://www.sphinx-doc.org/en/stable/ext/autodoc.html#directive-autoclass
-#autoclass_content="both"
+autoclass_content="both"
 
 #http://www.sphinx-doc.org/en/stable/ext/autodoc.html
 autodoc_member_order="bysource"
@@ -107,7 +107,7 @@ todo_include_todos = True
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static/css/pulsarpy.css']
+html_static_path = ['_static/css/custom.css']
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
@@ -181,4 +181,4 @@ texinfo_documents = [
 #: Define setup() function as descried in Read The Docs at                                             
 #: http://docs.readthedocs.io/en/latest/guides/adding-custom-css.html                                  
 def setup(app):                                                                                        
-    app.add_stylesheet('css/pulsarpy.css') 
+    app.add_stylesheet('css/custom.css') 

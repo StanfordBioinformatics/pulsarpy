@@ -1,6 +1,6 @@
 build/
 dist/
-encode_utils.egg-info/
+pulsarpy.egg-info/
 .nfs*
 *.pyc
 /dcc_submitters.json

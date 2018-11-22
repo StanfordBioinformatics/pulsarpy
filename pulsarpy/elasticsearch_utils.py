@@ -21,11 +21,17 @@ class MultipleHitsException(Exception):
 class Connection():
 
     def __init__(self):
-        ES_URL = os.environ["ES_URL"]
-        ES_USER = os.environ["ES_USER"]
-        ES_PW = os.environ["ES_PW"]
+        ES_URL = os.environ.get("ES_URL", None)
+        if not ES_URL:
+            print("Warning: environment variable ES_URL not set.")
+        ES_USER = os.environ.get("ES_USER", "")
+        if not ES_USER:
+            print("Warning: environment variable ES_USER not set.")
+        ES_PW = os.environ.get("ES_PW", "")
+        if not ES_PW:
+            print("Warning: environment variable ES_PW not set.")
         ES_AUTH = (ES_USER, ES_PW)
-        ES = Elasticsearch(ES_URL, http_auth=ES_AUTH)
+        self.ES = Elasticsearch(ES_URL, http_auth=ES_AUTH)
 
 
     def get_record_by_name(self, index, name):

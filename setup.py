@@ -34,20 +34,20 @@ setup(
       "Operating System :: OS Independent",
   ],
   description = "Pulsar ENCODE LIMS client.",
-  long_description = long_description,
-  long_description_content_type = "text/markdown",
   install_requires = [
     "elasticsearch-dsl",
     "encode-utils",
     "inflection",
     "requests",
   ],
+  long_description = long_description,
+  long_description_content_type = "text/markdown",
   name = "pulsarpy",
   packages = find_packages(),
   project_urls = {
       "Read the Docs": "https://pulsarpy.readthedocs.io/en/latest",
   },
-  url = "https://github.com/nathankw/pulsarpy",
   scripts = scripts,
+  url = "https://github.com/nathankw/pulsarpy",
   version = "1.0.0.post1",
 )
