@@ -832,6 +832,10 @@ class SequencingRun(Model):
 
 class SequencingResult(Model):
     MODEL_ABBR = "SRES"
+    FKEY_MAP = {} 
+    FKEY_MAP["library_id"] = "Library"
+    FKEY_MAP["sequencing_run_id"] = "SequencingRun"
+    FKEY_MAP["analysis_ids"] = "SequencingRun"
 
 
 class Shipping(Model):
