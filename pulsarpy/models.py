@@ -30,6 +30,9 @@ import pulsarpy.elasticsearch_utils
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 THIS_MODULE = import_module(__name__)
+# Note that using the json param in a HTTP request via the requests module will cause the 
+# header 'content-type': 'application/json' to be set. Nonetheless, I'll explicitly set it here in case 
+# the data parameter is ever mistakingly used instead of the json one.
 HEADERS = {'accept': 'application/json', 'content-type': 'application/json', 'Authorization': 'Token token={}'.format(p.API_TOKEN)}
 
 # Curl Examples
@@ -97,7 +100,7 @@ def remove_model_prefix(uid):
 def get_model_attrs(model_name):
     url = os.path.join(p.URL, "utils/model_attrs")
     payload = {"model_name": model_name}
-    response = requests.get(url=url,headers=HEADERS, verify=False, data=json.dumps(payload))
+    response = requests.get(url=url,headers=HEADERS, verify=False, json=payload)
     response.raise_for_status()
     return response.json()
 
@@ -415,7 +418,7 @@ class Model(metaclass=Meta):
         url = os.path.join(cls.URL, "find_by")
         payload = {"find_by": payload}
         cls.debug_logger.debug("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
-        res = requests.post(url=url, data=json.dumps(payload), headers=HEADERS, verify=False)
+        res = requests.post(url=url, json=payload, headers=HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
         res_json = res.json()
@@ -454,7 +457,7 @@ class Model(metaclass=Meta):
         url = os.path.join(cls.URL, "find_by_or")
         payload = {"find_by_or": payload}
         cls.debug_logger.debug("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
-        res = requests.post(url=url, data=json.dumps(payload), headers=HEADERS, verify=False)
+        res = requests.post(url=url, json=payload, headers=HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
         if res:
            try:
@@ -504,7 +507,7 @@ class Model(metaclass=Meta):
         payload = self.check_boolean_fields(payload)
         payload = self.__class__.add_model_name_to_payload(payload)
         self.debug_logger.debug("PATCHING payload {}".format(json.dumps(payload, indent=4)))
-        res = requests.patch(url=self.record_url, data=json.dumps(payload), headers=HEADERS, verify=False)
+        res = requests.patch(url=self.record_url, json=payload, headers=HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
         json_res = res.json()
@@ -571,7 +574,7 @@ class Model(metaclass=Meta):
         # Run any pre-post hooks:
         payload = cls.prepost_hooks(payload)
         cls.debug_logger.debug("POSTING payload {}".format(json.dumps(payload, indent=4)))
-        res = requests.post(url=cls.URL, data=json.dumps(payload), headers=HEADERS, verify=False)
+        res = requests.post(url=cls.URL, json=(payload), headers=HEADERS, verify=False)
         cls.write_response_html_to_file(res,"bob.html")
         if not res.ok:
             cls.log_error(res.text)
@@ -729,7 +732,7 @@ class CrisprModification(Model):
        url = self.record_url +  "/clone"
        self.debug_logger.debug("Cloning with URL {}".format(url))
        payload = {"biosample_id": biosample_id}
-       res = requests.post(url=url, data=json.dumps(payload), headers=HEADERS, verify=False)
+       res = requests.post(url=url, json=payload, headers=HEADERS, verify=False)
        res.raise_for_status()
        self.write_response_html_to_file(res,"bob.html")
        self.debug_logger.debug("Cloned GeneticModification {}".format(self.rec_id))
@@ -887,7 +890,7 @@ class User(Model):
             `NoneType`: None.
         """
         url = self.record_url + "/archive"
-        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=HEADERS, verify=False)
+        res = requests.patch(url=url, json={"user_id": user_id}, headers=HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
 
@@ -901,7 +904,7 @@ class User(Model):
             `NoneType`: None.
         """
         url = self.record_url + "/unarchive"
-        res = requests.patch(url=url, data=json.dumps({"user_id": user_id}), headers=HEADERS, verify=False)
+        res = requests.patch(url=url, json={"user_id": user_id}, headers=HEADERS, verify=False)
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
 
