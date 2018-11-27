@@ -6,7 +6,40 @@
 #nathankw@stanford.edu
 ###
 
+import requests
+
+import pulsarpy
+
 SREQ_STATUSES = ["not started", "started", "trouble-shooting", "failed", "finished"]
+
+def send_mail(form, from_name):
+    """
+    Sends a mail using the configured mail server for Pulsar.  See mailgun documentation at
+    https://documentation.mailgun.com/en/latest/user_manual.html#sending-via-api for specifics.
+ 
+    Args:
+        form: `dict`. The mail form fields, i.e. 'to', 'from', ...
+
+    Returns: `requests.models.Response` instance.
+
+    Raises: `requests.exceptions.HTTPError`: The status code is not ok.
+
+    Example::
+
+        payload = {
+            "from"="{} <mailgun@{}>".format(from_name, pulsarpy.MAIL_DOMAIN), 
+            "subject": "mailgun test", 
+            "text": "howdy there",
+            "to": "nathankw@stanford.edu", 
+        }
+        send_mail(payload)
+
+    """
+    form["from"] = "{} <mailgun@{}>".format(from_name, pulsarpy.MAIL_DOMAIN),
+    res = requests.post(pulsarpy.MAIL_SERVER_URL, data=form, auth=pulsarpy.MAIL_AUTH)
+    res.raise_for_status()
+    return res
+
 
 def fahrenheit_to_celsius(temp):
     return (temp - 32) * (5.0/9)
