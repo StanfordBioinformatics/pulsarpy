@@ -12,7 +12,7 @@
 # http://python-packaging.readthedocs.io/en/latest/dependencies.html.
 
 # PSF tutorial for packaging up projects:
-# https://packaging.python.org/tutorials/packaging-projects/
+# https://packaging.python.org/tutorials/packaging-projects
 
 import glob
 import os
@@ -48,6 +48,6 @@ setup(
       "Read the Docs": "https://pulsarpy.readthedocs.io/en/latest",
   },
   scripts = scripts,
-  url = "https://github.com/nathankw/pulsarpy",
+  url = "https://github.com/nathankw/pulsarpy", # home page
   version = "1.0.0.post1",
 )
