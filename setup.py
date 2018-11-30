@@ -49,5 +49,5 @@ setup(
   },
   scripts = scripts,
   url = "https://github.com/nathankw/pulsarpy", # home page
-  version = "1.0.0.post1",
+  version = "1.1.0",
 )
