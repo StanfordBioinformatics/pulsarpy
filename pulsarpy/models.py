@@ -11,7 +11,7 @@
 # See https://inflection.readthedocs.io/en/latest/.
 """
 A client that contains classes named after each model in Pulsar to handle RESTful communication with
-the Pulsar API. 
+the Pulsar API.
 """
 
 import base64
@@ -30,8 +30,8 @@ import pulsarpy.elasticsearch_utils
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 THIS_MODULE = import_module(__name__)
-# Note that using the json param in a HTTP request via the requests module will cause the 
-# header 'content-type': 'application/json' to be set. Nonetheless, I'll explicitly set it here in case 
+# Note that using the json param in a HTTP request via the requests module will cause the
+# header 'content-type': 'application/json' to be set. Nonetheless, I'll explicitly set it here in case
 # the data parameter is ever mistakingly used instead of the json one.
 HEADERS = {'accept': 'application/json', 'content-type': 'application/json', 'Authorization': 'Token token={}'.format(p.API_TOKEN)}
 
@@ -110,11 +110,11 @@ class Meta(type):
         """
         Creates a name for a log file that is meant to be used in a call to
         ``logging.FileHandler``. The log file name will incldue the path to the log directory given
-        by the `p.LOG_DIR` constant. The format of the file name is: 'log_$HOST_$TAG.txt', where 
+        by the `p.LOG_DIR` constant. The format of the file name is: 'log_$HOST_$TAG.txt', where
 
-        $HOST is the hostname part of the URL given by ``URL``, and $TAG is the value of the 
+        $HOST is the hostname part of the URL given by ``URL``, and $TAG is the value of the
         'tag' argument. The log directory will be created if need be.
-    
+
         Args:
             tag: `str`. A tag name to add to at the end of the log file name for clarity on the
                 log file's purpose.
@@ -132,7 +132,7 @@ class Meta(type):
         the messages it receives at the specified error level or greater.  The log file name will
         be of the form log_$HOST_$TAG.txt, where $HOST is the hostname part of the URL given
         by ``p.URL``, and $TAG is the value of the 'tag' argument.
-    
+
         Args:
             logger: The `logging.Logger` instance to add the `logging.FileHandler` to.
             level:  `int`. A logging level (i.e. given by one of the constants `logging.DEBUG`,
@@ -149,7 +149,7 @@ class Meta(type):
 
     def __init__(newcls, classname, supers, classdict):
         #: Used primarily for setting the lower-cased and underscored model name in the payload
-        #: for post and patch operations. 
+        #: for post and patch operations.
         newcls.MODEL_NAME = inflection.underscore(newcls.__name__)
         #: Elasticsearch index name for the Pulsar model.
         newcls.ES_INDEX_NAME = inflection.pluralize(newcls.MODEL_NAME)
@@ -177,7 +177,7 @@ class Model(metaclass=Meta):
     """
     #: Most models have an attribute alled upstream_identifier that is used to store the value of the
     #: record in an "upstream" database that is submitted to, i.e. the ENCODE Portal. Not all models
-    #: have this attribute since not all are used for submission to an upstream portal. 
+    #: have this attribute since not all are used for submission to an upstream portal.
     UPSTREAM_ATTR = "upstream_identifier"
     MODEL_ABBR = ""  # subclasses define
 
@@ -208,19 +208,19 @@ class Model(metaclass=Meta):
     post_logger.setLevel(log_level)
     Meta.add_file_handler(logger=post_logger, level=log_level, tag="posted")
     log_msg = "-----------------------------------------------------------------------------------"
-    
+
     # Check if neccessary environment variables are set:
     if not p.URL:
         debug_logger.debug("Warning: Environment variable PULSAR_API_URL not set.")
     elif not p.API_TOKEN:
         debug_logger.debug("Warning: Environment variable PULSAR_TOKEN not set.")
-    debug_logger.debug(log_msg) 
-    error_logger.error(log_msg) 
+    debug_logger.debug(log_msg)
+    error_logger.error(log_msg)
     log_msg = "Connecting to {}".format(p.URL)
     error_logger.error(log_msg)
-    debug_logger.debug(log_msg) 
-    
-    #: Connection to Elasticsearch. Expects that the envrionment variables ES_URL, ES_USER, and 
+    debug_logger.debug(log_msg)
+
+    #: Connection to Elasticsearch. Expects that the envrionment variables ES_URL, ES_USER, and
     #: ES_PW are set, which signifiy the Elasticsearch cluster URL, login username and login
     #: password, respectively.
     ES = pulsarpy.elasticsearch_utils.Connection()
@@ -229,14 +229,14 @@ class Model(metaclass=Meta):
         """
         Find the record of the given model specified by self.MODEL_NAME. The record can be looked up
         in a few ways, depending on which argument is specified (uid or upstream). If both are specified,
-        then the upstream argument will be ignored. 
+        then the upstream argument will be ignored.
 
         Args:
             uid: The database identifier of the record to fetch, which can be specified either as the
                 primary id (i.e. 8) or the model prefix plus the primary id (i.e. B-8).
                 Could also be the record's name if it has a name attribute (not all models do)
                 and if so will be converted to the record ID.
-            upstream: If set, then the record will be searched on its upstream_identifier attribute. 
+            upstream: If set, then the record will be searched on its upstream_identifier attribute.
         """
         # self.attrs will store the actual record's attributes. Initialize value now to empty dict
         # since it is expected to be set already in self.__setattr__().
@@ -307,22 +307,22 @@ class Model(metaclass=Meta):
         reference is an integer value and if so, returns that as it is presumed to be the foreign key.
 
         Raises:
-            `pulsarpy.elasticsearch_utils.MultipleHitsException`: Multiple hits were returned from the name search. 
-            `pulsarpy.models.RecordNotFound`: No results were produced from the name search. 
+            `pulsarpy.elasticsearch_utils.MultipleHitsException`: Multiple hits were returned from the name search.
+            `pulsarpy.models.RecordNotFound`: No results were produced from the name search.
         """
         try:
             int(name)
             return name #Already a presumed ID.
         except ValueError:
             #Not an int, so maybe a name.
-            try:                                                                                        
-                result = cls.ES.get_record_by_name(cls.ES_INDEX_NAME, name)          
+            try:
+                result = cls.ES.get_record_by_name(cls.ES_INDEX_NAME, name)
                 if result:
                     return result["id"]
-            except pulsarpy.elasticsearch_utils.MultipleHitsException as e:  
+            except pulsarpy.elasticsearch_utils.MultipleHitsException as e:
                 raise
             raise RecordNotFound("Name '{}' for model '{}' not found.".format(name, cls.__name__))
-    
+
 
     @classmethod
     def add_model_name_to_payload(cls, payload):
@@ -359,10 +359,10 @@ class Model(metaclass=Meta):
             val = val.lower()
             if val in ["yes", "true"]:
                 val = True
-                payload[key] = val 
+                payload[key] = val
             elif val == ["no",  "false"]:
                 val = False
-                payload[key] = val 
+                payload[key] = val
         return payload
 
     def get_upstream(self):
@@ -374,7 +374,7 @@ class Model(metaclass=Meta):
         being submitted. The alias here is composed of the record ID in Pulsar (i.e. B-1 for the Biosample
         with ID 1). However, the record ID is prefexed with a 'p' to designate that this record was
         submitted from Pulsar. This is used to generate a unique alias considering that we used to
-        uses a different LIMS (Syapse) to submit records.  Many of the models in Syapse used the same 
+        uses a different LIMS (Syapse) to submit records.  Many of the models in Syapse used the same
         model prefix as is used in Pulsar, i.e. (B)Biosample and (L)Library. Thus, w/o the 'p' prefix,
         the same alias could be generated in Pulsar as a previous one used in Syapse.
         """
@@ -386,7 +386,7 @@ class Model(metaclass=Meta):
         """
         res = requests.delete(url=self.record_url, headers=HEADERS, verify=False)
         #self.write_response_html_to_file(res,"bob_delete.html")
-        if res.status_code == 204: 
+        if res.status_code == 204:
             #No content. Can't render json:
             return {}
         return res.json()
@@ -397,7 +397,7 @@ class Model(metaclass=Meta):
         Searches the model in question by AND joining the query parameters.
 
         Implements a Railsy way of looking for a record using a method by the same name and passing
-        in the query as a dict. as well. Only the first hit is returned, and there is no particular 
+        in the query as a dict. as well. Only the first hit is returned, and there is no particular
         ordering specified in the server-side API method.
 
         Args:
@@ -407,11 +407,11 @@ class Model(metaclass=Meta):
 
         Returns:
             `dict`: The JSON serialization of the record, if any, found by the API call.
-            `None`: If the API call didnt' return any results and the `found` parameter is False. 
+            `None`: If the API call didnt' return any results and the `found` parameter is False.
 
         Raises:
             `pulsarpy.models.RecordNotFound`: No records were found, and the `require` parameter is
-                True. 
+                True.
         """
         if not isinstance(payload, dict):
             raise ValueError("The 'payload' parameter must be provided a dictionary object.")
@@ -490,7 +490,7 @@ class Model(metaclass=Meta):
             payload - hash. This will be JSON-formatted prior to sending the request.
 
         Returns:
-            `dict`. The JSON formatted response. 
+            `dict`. The JSON formatted response.
 
         Raises:
             `requests.exceptions.HTTPError`: The status code is not ok.
@@ -518,18 +518,18 @@ class Model(metaclass=Meta):
     def set_id_in_fkeys(cls, payload):
         """
         Looks for any keys in the payload that end with either _id or _ids, signaling a foreign
-        key field. For each foreign key field, checks whether the value is using the name of the 
+        key field. For each foreign key field, checks whether the value is using the name of the
         record or the acutal primary ID of the record (which may include the model abbreviation, i.e.
         B-1). If the former case, the name is replaced with
-        the record's primary ID. 
+        the record's primary ID.
 
         Args:
             payload: `dict`. The payload to POST or PATCH.
 
         Returns:
-            `dict`. The payload. 
+            `dict`. The payload.
         """
-    
+
         for key in payload:
             val = payload[key]
             if not val:
@@ -550,7 +550,7 @@ class Model(metaclass=Meta):
     @classmethod
     def prepost_hooks(cls, payload):
         return payload
-    
+
 
     @classmethod
     def post(cls, payload):
@@ -593,12 +593,12 @@ class Model(metaclass=Meta):
         """
         Logs the provided error message to both the error logger and the debug logger logging
         instances.
-        
+
         Args:
             msg: `str`. The error message to log.
         """
-        cls.error_logger.error(msg) 
-        cls.debug_logger.debug(msg) 
+        cls.error_logger.error(msg)
+        cls.debug_logger.debug(msg)
 
     @staticmethod
     def write_response_html_to_file(response,filename):
@@ -737,7 +737,7 @@ class CrisprModification(Model):
        self.write_response_html_to_file(res,"bob.html")
        self.debug_logger.debug("Cloned GeneticModification {}".format(self.rec_id))
        return res.json()
-                
+
 
 class Donor(Model):
     MODEL_ABBR = "DON"
@@ -801,7 +801,7 @@ class NucleicAcidTerm(Model):
 
 class PairedBarcode(Model):
     MODEL_ABBR = "PBC"
-    
+
 
 class Plate(Model):
     MODEL_ABBR = "PL"
@@ -819,7 +819,7 @@ class SequencingRequest(Model):
     FKEY_MAP["sequencing_platform_id"] = "SequencingPlatform"
     FKEY_MAP["sequencing_center_id"] = "SequencingCenter"
     FKEY_MAP["submitted_by_id"] = "User"
-    
+
 
 class SequencingPlatform(Model):
     MODEL_ABBR = "SP"
@@ -832,10 +832,22 @@ class SequencingRun(Model):
     FKEY_MAP["sequencing_request_id"] = "SequencingRequest"
     FKEY_MAP["submitted_by_id"] = "User"
 
-
+    def library_sequencing_results(self):
+        """
+        Generates a dict. where each key is a Library ID on the SequencingRequest and each value
+        is the associated SequencingResult. Libraries that aren't yet with a SequencingResult are
+        not inlcuded in the dict.
+        """
+        sres_ids = self.sequencing_result_ids
+        res = {}
+        for i in sres_ids:
+            sres = SequencingResult(i)
+            res[sres.library_id] = sres
+        return res
+            
 class SequencingResult(Model):
     MODEL_ABBR = "SRES"
-    FKEY_MAP = {} 
+    FKEY_MAP = {}
     FKEY_MAP["library_id"] = "Library"
     FKEY_MAP["sequencing_run_id"] = "SequencingRun"
     FKEY_MAP["analysis_ids"] = "SequencingRun"
@@ -847,7 +859,7 @@ class Shipping(Model):
     FKEY_MAP["biosample_id"] = "Biosample"
     FKEY_MAP["from_id"] = "Address"
     FKEY_MAP["to_id"] = "Address"
-    
+
 
 class SingleCellSorting(Model):
     MODEL_ABBR = "SCS"
