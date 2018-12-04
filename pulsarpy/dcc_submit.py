@@ -123,7 +123,7 @@ class Submit():
         A wrapper over `encode_utils.connection.Connection.post()`. 
 
         First checks if the Pulsar record has an upstream_identifier set, and if set, returns
-        that. 
+        it rather than attempting to re-post.
 
         Adds aliases to the payload being the record's record ID and name. 
 
@@ -142,10 +142,10 @@ class Submit():
             pulsar_rec_id: `str`. The identifier of the Pulsar record to POST to the DCC.
         Returns:
             `str`: The upstream identifier for the new record on the ENCODE Portal, or the existing
-            record identifier if the record already exists. The identifier of either the new record 
+            upstream identifier if the record already exists. The identifier of either the new record 
             or existing record on the ENCODE Portal is determined to be the 'accession' if that property is present, 
             otherwise it's the first alias if the 'aliases' property is present, otherwise its 
-            the 'uuid' property. 
+            the value of 'uuid' property.
         """
         payload[self.ENC_CONN.PROFILE_KEY] = dcc_profile
         rec = pulsar_model(pulsar_rec_id)
@@ -155,7 +155,6 @@ class Submit():
             return upstream
         aliases = payload.get("aliases", [])
         aliases.append(rec.abbrev_id())
-        aliases = list(set(aliases))
         # Add value of 'name' property as an alias, if this property exists for the given model.
         try:
             name = self.sanitize_prop_val(rec.name)
@@ -163,10 +162,11 @@ class Submit():
                 aliases.append(name)
         except KeyError:
             pass
+        aliases = list(set(aliases))
         payload["aliases"] = aliases
     
         # `dict`. The POST response if the record didn't yet exist on the ENCODE Portal, or the
-        # record itself if it does already exist. Note that the dict. will be empty if the connection
+        # record JSON itself if it does already exist. Note that the dict. will be empty if the connection
         # object to the ENCODE Portal has the dry-run feature turned on.
         response_json = self.ENC_CONN.post(payload)
         if "accession" in response_json:
@@ -493,7 +493,7 @@ class Submit():
         return res
         #return payload
 
-    def post_fastq_file(self, pulsar_sres_id, read_num, patch=False):
+    def post_fastq_file(self, pulsar_sres_id, read_num, enc_replicate_id, patch=False):
         """
         Creates a file record on the ENCODE Portal. 
 
@@ -502,23 +502,50 @@ class Submit():
             read_num: `int`. being either 1 or 2. Use 1 for the forwrard reads FASTQ file, and 2
                 for the reverse reads FASTQ file. A SequencingResult in Pulsar stores the location
                 of both files (if paired-end sequening).
+            end_replicate_id: `str`. The identifier of the DCC replicate record that the file record
+                is to be associated with.
         """
         sres = models.SequencingResult(pulsar_sres_id)
-        if read_num == 1:
-            file_name = sres.read1_uri
-        elif read_num == 2:
-            file_name = sres.read2_uri
-        if not file_name:
-            raise NoFastqFile("SequencingResult '{}' for R{read_num} does not have a FASTQ file path set.".format(pulsar_sres_id, read_num))
-        aliases = []
-        aliases.append(file_name)
-        srun = models.Sequencingrun(sres.sequencing_run_id)
-        storage_location = models.FileReference(srun.storage_location_id)
-        storage_path = storage_location.file_path
-        data_storage = models.DataStorage(storage_location.data_storage_id)
-        full_path = os.path.join(data_storage.folder_base_path, storage_path, file_name)
+        sreq = models.SequencingRequest(sres.sequencing_request_id)
+        platform = models.Platform(sreq.sequencing_platform_id)
         payload = {}
+        # Need to set md5sum and file_size. 
+        if read_num == 1:
+            payload["paired_end"] = 1
+            file_uri = sres.read1_uri
+            read_count = sres.read1_count
+        elif read_num == 2:
+            payload["paired_end"] = 2
+            file_uri = sres.read2_uri
+            read_count = sres.read2_count
+            # Need to set paired_with key in the payload. In this case, 
+            # it is expected that R1 has been already submitted.
+            payload["paired_with"] = sres.read1_upstream_identifier
+        if not file_uri:
+            raise NoFastqFile("SequencingResult '{}' for R{read_num} does not have a FASTQ file path set.".format(pulsar_sres_id, read_num))
+        data_storage = models.DataStorage(srun.data_storage_id)
+        data_storage_provider = models.DataStorageProvider(data_storage.data_storage_provider_id)
+        if data_storage_provider.name == "DNAnexus":
+            # Download file and set file_size and md5sum payload keys
+        dx_file = dxpy.DXFile(dxid=file_uri)
+        file_ref = "dnanexus:{file_uri}".format(file_uri)
+        aliases = [dx_file.name, file_ref]
+        srun = models.Sequencingrun(sres.sequencing_run_id)
+        full_path = os.path.join(data_storage.folder_base_path, storage_path, file_uri)
+        dcc_rep = self.ENC_CONN.get(rec_ids=enc_replicate_id, ignore404=False)
         payload["aliases"] = aliases
+        dcc_rep = self.ENC_CONN.get(rec_ids=enc_replicate_id, ignore404=False)
+        payload["file_format"] = "fastq"
+        payload["output_type"] = "reads"
+        # The Pulsar Platform must already have the upstream_identifier attribute set.
+        payload["platform"] = platform.upstream_identifier
+        if read_count:
+            payload["read_count"] = read_count
+        payload["replicate"] = enc_replicate_id
+        payload["run_type"] = sreq.paired_end
+        payload["submitted_file_name"] = file_ref
+        
+        
         
 
     def get_barcode_details_for_ssc(self, ssc_id):
