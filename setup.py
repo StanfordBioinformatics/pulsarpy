@@ -36,7 +36,6 @@ setup(
   description = "Pulsar ENCODE LIMS client.",
   install_requires = [
     "elasticsearch-dsl",
-    "encode-utils",
     "inflection",
     "requests",
   ],
