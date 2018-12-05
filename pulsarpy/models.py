@@ -684,6 +684,16 @@ class ChipseqExperiment(Model):
     FKEY_MAP["user_id"] = "User"
     FKEY_MAP["wild_type_control_id"] = "Biosample"
 
+    def control_map(self):
+        """
+        Creates a dict. where each key is the ID of a non-control Biosample record on the 
+        ChipseqExperiment, and each value is the 
+
+        Returns:
+            `dict`. 
+        """
+        pass
+
 
 class DataStorage(Model):
     MODEL_ABBR = "DS"
