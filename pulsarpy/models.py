@@ -279,9 +279,9 @@ class Model(metaclass=Meta):
             `pulsarpy.models.RecordNotFound`: A record could not be found.
         """
         if rec_id:
-            record_url = os.path.join(self.URL, str(rec_id))
-            self.debug_logger.debug("GET {} record with ID {}: {}".format(self.__class__.__name__, rec_id, record_url))
-            response = requests.get(url=record_url, headers=HEADERS, verify=False)
+            self.record_url = self.__class__.get_record_url(rec_id)
+            self.debug_logger.debug("GET {} record with ID {}: {}".format(self.__class__.__name__, rec_id, self.record_url))
+            response = requests.get(url=self.record_url, headers=HEADERS, verify=False)
             if not response.ok and response.status_code == requests.codes.NOT_FOUND:
                 raise RecordNotFound("Search for {} record with ID '{}' returned no results.".format(self.__class__.__name__, rec_id))
             self.write_response_html_to_file(response,"get_bob.html")
@@ -289,7 +289,12 @@ class Model(metaclass=Meta):
             return response.json()
         elif upstream:
             rec_json = self.__class__.find_by({"upstream_identifier": upstream}, require=True)
+            self.record_url = self.__class__.get_record_url(rec_json.id)
         return rec_json
+
+    @classmethod
+    def get_record_url(self, rec_id):
+        return os.path.join(self.URL, str(rec_id))
 
     @classmethod
     def log_post(cls, res_json):
@@ -647,6 +652,19 @@ class Biosample(Model):
     FKEY_MAP["pooled_from_biosample_ids"] = "Biosample"
     FKEY_MAP["treatment_ids"] = "Treatment"
 
+    def get_latest_seqresult(self):                                                        
+        # Use latest Library                                                                           
+        library_id = max(self.library_ids)                                                 
+        library = Library(library_id)                                                  
+        sreq_ids = library.sequencing_request_ids                                                      
+        # Use latest SequencingRequest                                                                 
+        sreq = SequencingRequest(max(sreq_ids))                                        
+        srun_ids = sreq.sequencing_run_ids                                                             
+        # Use latest SequencingRun                                                                     
+        srun = SequencingRun(max(srun_ids))                                            
+        sres = srun.library_sequencing_result(library_id)                                              
+        return sres
+
 
 class BiosampleOntology(Model):
     MODEL_ABBR = "BO"
@@ -684,7 +702,7 @@ class ChipseqExperiment(Model):
     FKEY_MAP["user_id"] = "User"
     FKEY_MAP["wild_type_control_id"] = "Biosample"
 
-    def control_map(self):
+    def paired_input_control_map(self):
         """
         Creates a dict. where each key is the ID of a non-control Biosample record on the 
         ChipseqExperiment, and each value is the 
@@ -692,7 +710,10 @@ class ChipseqExperiment(Model):
         Returns:
             `dict`. 
         """
-        pass
+        action = os.path.join(self.record_url, "paired_input_control_map")
+        res = requests.get(url=action, headers=HEADERS, verify=False)
+        res.raise_for_status()
+        return res.json()
 
 
 class DataStorage(Model):
@@ -842,6 +863,13 @@ class SequencingRun(Model):
     FKEY_MAP["sequencing_request_id"] = "SequencingRequest"
     FKEY_MAP["submitted_by_id"] = "User"
 
+    def library_sequencing_result(self, library_id):
+        action = os.path.join(self.record_url, "library_sequencing_result")
+        res = requests.get(url=action, json={"library_id": library_id}, headers=HEADERS, verify=False)
+        res.raise_for_status()
+        return res.json()
+
+
     def library_sequencing_results(self):
         """
         Generates a dict. where each key is a Library ID on the SequencingRequest and each value
@@ -861,6 +889,13 @@ class SequencingResult(Model):
     FKEY_MAP["library_id"] = "Library"
     FKEY_MAP["sequencing_run_id"] = "SequencingRun"
     FKEY_MAP["analysis_ids"] = "SequencingRun"
+
+    def get_upstream_identifier(self, read_num):
+        if read_num == 1:                                                              
+            return self.read1_upstream_identifier                         
+        else:                                                                          
+            return self.read2_upstream_identifier 
+        raise Exception("SequencingResult {} read number {} does not have an upstream_identifier set.".format(sres.id, read_num))
 
 
 class Shipping(Model):
