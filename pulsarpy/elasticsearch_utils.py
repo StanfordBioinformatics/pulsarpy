@@ -65,6 +65,14 @@ class Connection():
         elif len(hits) == 1:
             return hits[0]["_source"]
         else:
-            msg = "match_phrase search found multiple records matching query '{}' for index '{}'.".format(name, index)
-            raise MultipleHitsException(msg)
+            # Mult. records found with same prefix. See if a single record whose name attr matches
+            # the match phrase exactly (in a lower-case comparison).  
+            for h in hits:
+                source = h["_source"]
+                record_name = source["name"]
+                if record_name.lower().strip() == name.lower().strip():
+                    return source
+                else:
+                    msg = "match_phrase search found multiple records matching query '{}' for index '{}'.".format(name, index)
+                    raise MultipleHitsException(msg)
     

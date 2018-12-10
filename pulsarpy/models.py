@@ -864,6 +864,9 @@ class SequencingRun(Model):
     FKEY_MAP["submitted_by_id"] = "User"
 
     def library_sequencing_result(self, library_id):
+        """
+        Fetches a SequencingResult record for a given Library ID.
+        """
         action = os.path.join(self.record_url, "library_sequencing_result")
         res = requests.get(url=action, json={"library_id": library_id}, headers=HEADERS, verify=False)
         res.raise_for_status()
