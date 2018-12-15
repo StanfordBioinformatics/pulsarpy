@@ -251,6 +251,10 @@ class Model(metaclass=Meta):
             rec_json = self._get(upstream=upstream)
         else:
             raise ValueError("Either the 'uid' or 'upstream' parameter must be set.")
+        # Convert None values to empty string
+        for key in rec_json:
+            if rec_json[key] == None:
+                rec_json[key] = ""
         self.rec_id = rec_json["id"]
         self.__dict__["attrs"] = rec_json #avoid call to self.__setitem__() for this attr.
 
@@ -269,6 +273,12 @@ class Model(metaclass=Meta):
             return object.__setattr__(self, name, value)
         object.__setattr__(self, self.attrs[name], value)
         #self.__dict__["attrs"][name] = value #this works too
+
+    def __getitem__(self, item):
+        return self.attrs[item]
+ 
+    def __setitem__(self, item, value):
+        self.attrs[item] = value
 
 
     def _get(self, rec_id=None, upstream=None):
@@ -652,9 +662,17 @@ class Biosample(Model):
     FKEY_MAP["pooled_from_biosample_ids"] = "Biosample"
     FKEY_MAP["treatment_ids"] = "Treatment"
 
+    def get_latest_library(self):
+        """
+        Returns the associated library having the largest ID (the most recent one created).
+        It's possible for a Biosample in Pulsar to have more than one Library, but this is rare. 
+        """
+        max_id = max(self.library_ids)                                                 
+        return Library(max_id)
+
     def get_latest_seqresult(self):                                                        
         # Use latest Library                                                                           
-        library_id = max(self.library_ids)                                                 
+        library = self.get_latest_library()
         library = Library(library_id)                                                  
         sreq_ids = library.sequencing_request_ids                                                      
         # Use latest SequencingRequest                                                                 
@@ -662,7 +680,7 @@ class Biosample(Model):
         srun_ids = sreq.sequencing_run_ids                                                             
         # Use latest SequencingRun                                                                     
         srun = SequencingRun(max(srun_ids))                                            
-        sres = srun.library_sequencing_result(library_id)                                              
+        sres = srun.library_sequencing_result(library.id)                                              
         return sres
 
 
