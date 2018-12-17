@@ -185,6 +185,11 @@ class Model(metaclass=Meta):
     #: Each key is a foreign key name and the value is the class name of the model it refers to.
     FKEY_MAP = {}
 
+    #: A prefix that can be added in front of record IDs, names, model-record ID. This is useful
+    #: when its necessary to add emphasis that these records exist or came from Pulsar ( i.e. when 
+    #: submitting them to an upstream database.
+    PULSAR_LIMS_PREFIX = "p"
+
     #: This class adds a file handler, such that all messages sent to it are logged to this
     #: file in addition to STDOUT.
     debug_logger = logging.getLogger(p.DEBUG_LOGGER_NAME)
@@ -393,8 +398,7 @@ class Model(metaclass=Meta):
         model prefix as is used in Pulsar, i.e. (B)Biosample and (L)Library. Thus, w/o the 'p' prefix,
         the same alias could be generated in Pulsar as a previous one used in Syapse.
         """
-        pulsar_lims_prefix = "p"
-        return pulsar_lims_prefix +  self.MODEL_ABBR + "-" + str(self.id)
+        return self.PULSAR_LIMS_PREFIX +  self.MODEL_ABBR + "-" + str(self.id)
 
     def delete(self):
         """Deletes the record.
