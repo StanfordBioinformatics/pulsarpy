@@ -798,6 +798,8 @@ class Donor(Model):
 
 class DonorConstruct(Model):
     MODEL_ABBR = "DONC"
+    FKEY_MAP = {}
+    FKEY_MAP["construct_tag_ids"] = "ConstructTag"
 
 
 class Document(Model):
