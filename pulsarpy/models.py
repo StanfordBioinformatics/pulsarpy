@@ -891,11 +891,17 @@ class SequencingRequest(Model):
         res = requests.get(url=action, headers=HEADERS, verify=False)
         res.raise_for_status()
         res_json = res.json()
+        # Convert library ID from string to int
+        new_res = {}
+        for lib_id in res_json:
+            new_res[int(lib_id)] = res_json[lib_id]
+        res_json = new_res
+
         if inverse:
             rev = {}
             for lib_id in res_json:
                 rev[res_json[lib_id]] = lib_id
-            res_json = rev
+        res_json = rev
         return res_json
 
 
