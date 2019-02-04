@@ -426,7 +426,7 @@ class Model(metaclass=Meta):
 
         Returns:
             `dict`: The JSON serialization of the record, if any, found by the API call.
-            `None`: If the API call didnt' return any results and the `found` parameter is False.
+            `None`: If the API call didnt' return any results. 
 
         Raises:
             `pulsarpy.models.RecordNotFound`: No records were found, and the `require` parameter is
@@ -530,6 +530,7 @@ class Model(metaclass=Meta):
         self.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
         json_res = res.json()
+        self.debug_logger.debug("Success")
         self.attrs = json_res
         return json_res
 
@@ -538,7 +539,7 @@ class Model(metaclass=Meta):
         """
         Looks for any keys in the payload that end with either _id or _ids, signaling a foreign
         key field. For each foreign key field, checks whether the value is using the name of the
-        record or the acutal primary ID of the record (which may include the model abbreviation, i.e.
+        record or the actual primary ID of the record (which may include the model abbreviation, i.e.
         B-1). If the former case, the name is replaced with
         the record's primary ID.
 
@@ -605,6 +606,7 @@ class Model(metaclass=Meta):
         res.raise_for_status()
         res = res.json()
         cls.log_post(res)
+        cls.debug_logger.debug("Success")
         return res
 
     @classmethod
@@ -693,6 +695,8 @@ class BiosampleOntology(Model):
 
 class BiosampleTermName(Model):
     MODEL_ABBR = "BTN"
+    FKEY_MAP = {}
+    FKEY_MAP["biosample_ontology_id"] = "BiosampleOntology"
 
 
 class BiosampleType(Model):
@@ -709,6 +713,7 @@ class ChipBatchItem(Model):
     MODEL_ABBR = "CBI"
     FKEY_MAP = {}
     FKEY_MAP["user_id"] = "User"
+    FKEY_MAP["antibody_id"] = "Antibody"
     FKEY_MAP["biosample_id"] = "Biosample"
     FKEY_MAP["chip_batch_id"] = "ChipBatch"
     FKEY_MAP["concentration_unit_id"] = "Unit"
