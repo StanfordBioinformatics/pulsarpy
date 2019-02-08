@@ -655,6 +655,7 @@ class Barcode(Model):
 class Biosample(Model):
     MODEL_ABBR = "B"
     FKEY_MAP = {}
+    FKEY_MAP["biosample_part_ids"] = "Biosample"
     FKEY_MAP["biosample_term_name_id"] = "BiosampleTermName"
     FKEY_MAP["biosample_type_id"] = "BiosampleType"
     FKEY_MAP["chipseq_experiment_id"] = "ChipseqExperiment"
@@ -665,6 +666,7 @@ class Biosample(Model):
     FKEY_MAP["transfected_by_id"] = "User"
     FKEY_MAP["vendor_id"] = "Vendor"
     FKEY_MAP["document_ids"] = "Document"
+    FKEY_MAP["pooled_biosample_ids"] = "Biosample"
     FKEY_MAP["pooled_from_biosample_ids"] = "Biosample"
     FKEY_MAP["treatment_ids"] = "Treatment"
 
