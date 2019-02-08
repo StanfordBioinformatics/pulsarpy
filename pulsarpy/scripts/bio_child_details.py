@@ -7,42 +7,55 @@ import os
 
 import pulsarpy.models as m
 
-def entry(biosample):
-    fields = []
-    fields.append(biosample.name)
-    fields.append(str(biosample.id))
-    fields.append(str(biosample.wild_type))
-    fields.append(str(biosample.control))
-    fields.append(str(biosample.part_of_id))
-    fields.append(",".join(biosample.pooled_from_biosample_ids))
-    return "\t".join(fields) + "\n"
+class BiosampleDetails():
+
+    #: The fields in the header line of the output file.
+    HEADER = ["Name", "ID", "WT?", "Control?", "Parent", "Pooled From"]
+
+    def __init__(self, outfile):
+        # list of Biosample IDs.
+        self.biosamples_seen = []
+        self.outfile = outfile
+        outfile_exists = os.path.exists(outfile)
+        self.fout = open(self.outfile, 'a')
+        if not outfile_exists:
+            # Update header fields/ordering when fields change in log_entry().
+            self.fout.write("\t".join(self.HEADER) + "\n")
+
+    def log_entry(self, biosample):
+        fields = []
+        fields.append(biosample.name)
+        fields.append(str(biosample.id))
+        fields.append(str(biosample.wild_type))
+        fields.append(str(biosample.control))
+        fields.append(str(biosample.part_of_id))
+        fields.append(",".join([str(x) for x in biosample.pooled_from_biosample_ids]))
+        self.fout.write("\t".join(fields) + "\n")
+    
+    def process(self, bid):
+        if bid in self.biosamples_seen:
+            return
+        b = m.Biosample(bid)
+        self.log_entry(b)
+        self.biosamples_seen.append(bid)
+        children = b.biosample_part_ids + b.pooled_biosample_ids
+        if children:
+            for bid in children:
+                self.process(bid)
 
 def get_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("-o", "--outfile", required=True, help="Output file. Will be opended in append mode.")
     parser.add_argument("-b", "--biosample-ids", nargs="+", required=True, help="One or more Biosample IDs.")
     return parser
-    
 
 def main():
     parser = get_parser()
     args = parser.parse_args()
-    outfile = args.outfile
     biosample_ids = args.biosample_ids
-
-    header = ["Name", "ID", "WT?", "Control?", "Parent", "Pooled From"]
-    outfile_exists = os.path.exists(outfile)
-    fout = open(outfile, "a")
-    if not outfile_exists:
-        # Update header fields/ordering when fields change in entry().
-        fout.write("\t".join(header) + "\n")
+    bt = BiosampleDetails(outfile="out.txt")
     for bid in biosample_ids:
-        b = m.Biosample(bid)
-        fout.write(entry(b))
-        for child_id in b.biosample_part_ids + b.pooled_biosample_ids:
-            child_biosample = m.Biosample(child_id)
-            fout.write(entry(child_biosample))
-    fout.close()
+        bt.process(bid)
+    bt.fout.close()
 
 if __name__ == "__main__":
     main()
