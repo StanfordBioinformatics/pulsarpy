@@ -704,20 +704,20 @@ class BiosampleTermName(Model):
 class BiosampleType(Model):
     MODEL_ABBR = "BTY"
 
-class ChipBatch(Model):
-    MODEL_ABBR = "CB"
+class Batch(Model):
+    MODEL_ABBR = "BCH"
     FKEY_MAP = {}
     FKEY_MAP["user_id"] = "User"
     FKEY_MAP["analyst_id"] = "User"
-    FKEY_MAP["chip_batch_item_ids"] = "ChipBatch"
+    FKEY_MAP["batch_item_ids"] = "Batch"
 
-class ChipBatchItem(Model):
+class BatchItem(Model):
     MODEL_ABBR = "CBI"
     FKEY_MAP = {}
     FKEY_MAP["user_id"] = "User"
     FKEY_MAP["antibody_id"] = "Antibody"
     FKEY_MAP["biosample_id"] = "Biosample"
-    FKEY_MAP["chip_batch_id"] = "ChipBatch"
+    FKEY_MAP["batch_id"] = "Batch"
     FKEY_MAP["concentration_unit_id"] = "Unit"
 
 class ChipseqExperiment(Model):
