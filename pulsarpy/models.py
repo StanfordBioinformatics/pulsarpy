@@ -377,10 +377,10 @@ class Model(metaclass=Meta):
             if type(val) != str:
                 continue
             val = val.lower()
-            if val in ["yes", "true"]:
+            if val in ["yes", "true", "pass"]:
                 val = True
                 payload[key] = val
-            elif val == ["no",  "false"]:
+            elif val == ["no",  "false", "fail"]:
                 val = False
                 payload[key] = val
         return payload
@@ -844,7 +844,7 @@ class GelImage(Model):
 class GelLane(Model):
     MODEL_ABBR = "GL"
     FKEY_MAP = {}
-    FKEY_MAP["biosample"] = "Biosample"
+    FKEY_MAP["biosample_id"] = "Biosample"
     FKEY_MAP["gel_id"] = "Gel"
 
 
@@ -853,6 +853,7 @@ class Immunoblot(Model):
     FKEY_MAP = {}
     FKEY_MAP["analyst_id"] = "User"
     FKEY_MAP["document_ids"] = "Document"
+    FKEY_MAP["gel_ids"] = "Gel"
     FKEY_MAP["primary_antibody_id"] = "Antibody"
     FKEY_MAP["secondary_antibody_ids"] = "Antibody"
 
