@@ -825,6 +825,38 @@ class FileReference(Model):
     MODEL_ABBR = "FR"
 
 
+class Gel(Model):
+    MODEL_ABBR = "GEL"
+    FKEY_MAP = {}
+    FKEY_MAP["immunoblot_id"] = "Immunoblot"
+    FKEY_MAP["pcr_id"] = "Pcr"
+    FKEY_MAP["gel_image_ids"] = "GelImage"
+    FKEY_MAP["gel_image_ids"] = "GelLane"
+    
+
+class GelImage(Model):
+    MODEL_ABBR = "GELI"
+    FKEY_MAP = {}
+    FKEY_MAP["gel_id"] = "Gel"
+    FKEY_MAP["sample_concentration_units_id"] = "Unit"
+
+
+class GelLane(Model):
+    MODEL_ABBR = "GL"
+    FKEY_MAP = {}
+    FKEY_MAP["biosample"] = "Biosample"
+    FKEY_MAP["gel_id"] = "Gel"
+
+
+class Immunoblot(Model):
+    MODEL_ABBR = "IB"
+    FKEY_MAP = {}
+    FKEY_MAP["analyst_id"] = "User"
+    FKEY_MAP["document_ids"] = "Document"
+    FKEY_MAP["primary_antibody_id"] = "Antibody"
+    FKEY_MAP["secondary_antibody_ids"] = "Antibody"
+
+
 class Library(Model):
     MODEL_ABBR = "L"
     FKEY_MAP = {}

@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 """
 Writes Biosample details to a tabular file for a given Biosample and all descendents.  
 """
@@ -13,7 +15,10 @@ class BiosampleDetails():
     HEADER = ["Name", "ID", "WT?", "Control?", "Parent", "Pooled From"]
 
     def __init__(self, outfile):
-        # list of Biosample IDs.
+        """
+        Args:
+            outfile: `str`. The name of the output file which will be opened in append mode. 
+        """
         self.biosamples_seen = []
         self.outfile = outfile
         outfile_exists = os.path.exists(outfile)
@@ -46,13 +51,15 @@ class BiosampleDetails():
 def get_parser():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("-b", "--biosample-ids", nargs="+", required=True, help="One or more Biosample IDs.")
+    parser.add_argument("-o", "--outfile", required=True, help="The output file. Will be opened in append mode.")
     return parser
 
 def main():
     parser = get_parser()
     args = parser.parse_args()
     biosample_ids = args.biosample_ids
-    bt = BiosampleDetails(outfile="out.txt")
+    outfile = args.outfile
+    bt = BiosampleDetails(outfile=outfile)
     for bid in biosample_ids:
         bt.process(bid)
     bt.fout.close()
