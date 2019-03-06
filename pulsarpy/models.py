@@ -19,6 +19,7 @@ from importlib import import_module
 import inflection
 import json
 import logging
+import mimetypes
 import os
 import requests
 import urllib3
@@ -438,7 +439,7 @@ class Model(metaclass=Meta):
         payload = {"find_by": payload}
         cls.debug_logger.debug("Searching Pulsar {} for {}".format(cls.__name__, json.dumps(payload, indent=4)))
         res = requests.post(url=url, json=payload, headers=HEADERS, verify=False)
-        cls.write_response_html_to_file(res,"bob.html")
+        #cls.write_response_html_to_file(res,"bob.html")
         res.raise_for_status()
         res_json = res.json()
         if res_json:
@@ -549,7 +550,6 @@ class Model(metaclass=Meta):
         Returns:
             `dict`. The payload.
         """
-
         for key in payload:
             val = payload[key]
             if not val:
@@ -757,8 +757,41 @@ class DataStorageProvider(Model):
 
 class Document(Model):
     MODEL_ABBR = "DOC"
+    FKEY_MAP = {}
+    FKEY_MAP["document_type_id"] = "DocumentType"
 
+    def download(self):
+        # The sever is Base64 encoding the payload, so we'll need to base64 decode it.
+        url = self.record_url + "/download"
+        res = requests.get(url=url, headers=HEADERS, verify=False)
+        res.raise_for_status()
+        data = base64.b64decode(res.json()["data"])
+        return data
 
+    @classmethod
+    def upload(cls, path, document_type, is_protocol, description=""):
+        """
+        Args:
+            path: `str`. The path to the document to upload. 
+            document_type: `str`. DocumentType identified by the value of its name attribute. 
+            is_protocol: `bool`. 
+            description: `str`. 
+        """
+        file_name = os.path.basename(path)
+        mime_type = mimetypes.guess_type(file_name)[0]
+        data = base64.b64encode(open(path, 'rb').read())
+        temp_uri = str(data, "utf-8")
+        #href = "data:{mime_type};base64,{temp_uri}".format(mime_type=mime_type, temp_uri=temp_uri) 
+        payload = {}
+        payload["content_type"] = mime_type 
+        payload["data"] = temp_uri
+        payload["description"] = description
+        payload["document_type_id"] = DocumentType(document_type).id
+        payload["name"] =  file_name
+        payload["is_protocol"] = is_protocol
+        cls.post(payload)
+        
+        
 class DocumentType(Model):
     MODEL_ABBR = "DOCTY"
 
@@ -807,18 +840,6 @@ class DonorConstruct(Model):
     MODEL_ABBR = "DONC"
     FKEY_MAP = {}
     FKEY_MAP["construct_tag_ids"] = "ConstructTag"
-
-
-class Document(Model):
-    MODEL_ABBR = "DOC"
-
-    def download(self):
-        # The sever is Base64 encoding the payload, so we'll need to base64 decode it.
-        url = self.record_url + "/download"
-        res = requests.get(url=url, headers=HEADERS, verify=False)
-        res.raise_for_status()
-        data = base64.b64decode(res.json()["data"])
-        return data
 
 
 class FileReference(Model):
