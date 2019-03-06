@@ -7,6 +7,7 @@
 ###
 
 import os
+import pdb
 
 import pulsarpy
 from elasticsearch import Elasticsearch
@@ -72,7 +73,6 @@ class Connection():
                 record_name = source["name"]
                 if record_name.lower().strip() == name.lower().strip():
                     return source
-                else:
-                    msg = "match_phrase search found multiple records matching query '{}' for index '{}'.".format(name, index)
-                    raise MultipleHitsException(msg)
+            msg = "match_phrase search found multiple records matching query '{}' for index '{}'.".format(name, index)
+            raise MultipleHitsException(msg)
     
