@@ -19,15 +19,19 @@ import os
 import sys
 from urllib.parse import urlparse
 
-# MAIL
+#####################
+### MAIL SETTINGS ###
+#####################
 MAIL_DOMAIN = os.environ.get("MAILGUN_DOMAIN","")
-MAIL_SERVER_URL = os.path.join("https://api.mailgun.net/v3/{}/messages".format(MAIL_DOMAIN))
-if not MAIL_DOMAIN:
-    # We don't want utils.send_mail trying to send mails when there isn't a domain specified.
-    # I tried this, and we strangly get a 200 back, so this could cause issues. 
-    MAIL_SERVER_URL = ""
+# We don't want utils.send_mail trying to send mail when there isn't a domain specified.
+# I tried this, and we strangly get a 200 back, so this could cause issues. The fix is to 
+# have MAIL_SERVER_URL empty in that case. 
+MAIL_SERVER_URL = ""
+if MAIL_DOMAIN:
+    MAIL_SERVER_URL = os.path.join("https://api.mailgun.net/v3/{}/messages".format(MAIL_DOMAIN))
+
 MAIL_AUTH = ("api", os.environ.get("MAILGUN_API_KEY",""))
-DEFAULT_TO = ["nathankw@stanford.edu"]
+DEFAULT_TO = [os.environ.get("SUPPORT_EMAIL_ADDR", "")]
 
 #: The directory that contains the log files created by the `Model` class.
 LOG_DIR = "Pulsarpy_Logs"

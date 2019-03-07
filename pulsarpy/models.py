@@ -663,6 +663,7 @@ class Biosample(Model):
     FKEY_MAP["donor_id"] = "Donor"
     FKEY_MAP["owner_id"] = "Owner"
     FKEY_MAP["part_of_id"] = "Biosample"
+    FKEY_MAP["pooled_from_ids"] = "Biosample"
     FKEY_MAP["transfected_by_id"] = "User"
     FKEY_MAP["vendor_id"] = "Vendor"
     FKEY_MAP["document_ids"] = "Document"
