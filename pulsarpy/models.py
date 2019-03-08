@@ -655,6 +655,7 @@ class Barcode(Model):
 class Biosample(Model):
     MODEL_ABBR = "B"
     FKEY_MAP = {}
+    FKEY_MAP["batch_item_id"] = "BatchItem"
     FKEY_MAP["biosample_part_ids"] = "Biosample"
     FKEY_MAP["biosample_term_name_id"] = "BiosampleTermName"
     FKEY_MAP["biosample_type_id"] = "BiosampleType"
