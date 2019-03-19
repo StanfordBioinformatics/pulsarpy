@@ -106,6 +106,9 @@ def get_model_attrs(model_name):
     return response.json()
 
 class Meta(type):
+    #: A list where each item is set to each instance's MODEL_ABBR class variable. 
+    _MODEL_ABBREVS = []
+
     @staticmethod
     def get_logfile_name(tag):
         """
@@ -155,6 +158,8 @@ class Meta(type):
         #: Elasticsearch index name for the Pulsar model.
         newcls.ES_INDEX_NAME = inflection.pluralize(newcls.MODEL_NAME)
         newcls.URL = os.path.join(p.URL, inflection.pluralize(newcls.MODEL_NAME))
+        if getattr(newcls, "MODEL_ABBR"):
+            Meta._MODEL_ABBREVS.append(newcls.MODEL_ABBR)
 
 
 class Model(metaclass=Meta):
@@ -335,14 +340,17 @@ class Model(metaclass=Meta):
             int(name)
             return name #Already a presumed ID.
         except ValueError:
-            #Not an int, so maybe a name.
-            try:
-                result = cls.ES.get_record_by_name(cls.ES_INDEX_NAME, name)
-                if result:
-                    return result["id"]
-            except pulsarpy.elasticsearch_utils.MultipleHitsException as e:
-                raise
-            raise RecordNotFound("Name '{}' for model '{}' not found.".format(name, cls.__name__))
+            pass
+        #Not an int, so maybe a combination of MODEL_ABBR and Primary Key, i.e. B-8.
+        if name.split("-")[0] in Meta._MODEL_ABBREVS:
+            return int(name.split("-", 1)[1])
+        try:
+            result = cls.ES.get_record_by_name(cls.ES_INDEX_NAME, name)
+            if result:
+                return result["id"]
+        except pulsarpy.elasticsearch_utils.MultipleHitsException as e:
+            raise
+        raise RecordNotFound("Name '{}' for model '{}' not found.".format(name, cls.__name__))
 
 
     @classmethod
