@@ -680,6 +680,35 @@ class Biosample(Model):
     FKEY_MAP["pooled_from_biosample_ids"] = "Biosample"
     FKEY_MAP["treatment_ids"] = "Treatment"
 
+    def parent_ids(self):
+        """
+        Returns an array of parent Biosample IDs. If the current Biosample has a part_of relationship,
+        the Biosampled referenced there will be returned. Otherwise, if the current Biosample was
+        generated from a pool of Biosamples (pooled_from_biosample_ids), then those will be returned.
+        Otherwise, the result will be an empty array.
+        """
+        action = os.path.join(self.record_url, "parent_ids")
+        res = requests.get(url=action, headers=HEADERS, verify=False)
+        res.raise_for_status()
+        return res.json()["biosamples"]
+        
+    def find_first_wt_parent(self):
+        """
+        Recursively looks at the part_of parent ancestry line (ignoring pooled_from parents) and returns
+        a parent Biosample ID if its wild_type attribute is True. 
+        """
+        parent_id = self.part_of_id
+        if not parent_id:
+            return False
+        parent = Biosample(parent_id)
+        if parent.wild_type:
+            return parent.id
+        return parent.find_first_wt_parent()        
+   
+            
+            
+            
+
     def get_latest_library(self):
         """
         Returns the associated library having the largest ID (the most recent one created).
