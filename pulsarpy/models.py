@@ -703,8 +703,7 @@ class Biosample(Model):
                 also has an Immunoblot linked to it, which may serve as a control between another 
                 immunoblot. For example, it could be useful to compare the target protein bands in
                 Immunoblots between a Wild Type sample and a CRISPR eGFP-tagged gene in a 
-                descendent sample. Note that it's possible, but unlikely, that a Biosample can have 
-                multiple Immunoblots linked to it. In that case, the first will be selected. 
+                descendent sample. 
 
         Returns:
             `False`: There isn't a WT parent, or there is but not one with an Immunoblot linked to
