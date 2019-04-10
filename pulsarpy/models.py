@@ -670,6 +670,7 @@ class Biosample(Model):
     FKEY_MAP["chipseq_experiment_id"] = "ChipseqExperiment"
     FKEY_MAP["crispr_modification_id"] = "CrisprModification"
     FKEY_MAP["donor_id"] = "Donor"
+    FKEY_MAP["immunoblot_ids"] = "Donor"
     FKEY_MAP["owner_id"] = "Owner"
     FKEY_MAP["part_of_id"] = "Biosample"
     FKEY_MAP["pooled_from_ids"] = "Biosample"
@@ -692,22 +693,34 @@ class Biosample(Model):
         res.raise_for_status()
         return res.json()["biosamples"]
         
-    def find_first_wt_parent(self):
+    def find_first_wt_parent(self, with_ip=False):
         """
         Recursively looks at the part_of parent ancestry line (ignoring pooled_from parents) and returns
         a parent Biosample ID if its wild_type attribute is True. 
+
+        Args:
+            with_ip: `bool`. True means to restrict the search to the first parental Wild Type that 
+                also has an Immunoblot linked to it, which may serve as a control between another 
+                immunoblot. For example, it could be useful to compare the target protein bands in
+                Immunoblots between a Wild Type sample and a CRISPR eGFP-tagged gene in a 
+                descendent sample. Note that it's possible, but unlikely, that a Biosample can have 
+                multiple Immunoblots linked to it. In that case, the first will be selected. 
+
+        Returns:
+            `False`: There isn't a WT parent, or there is but not one with an Immunoblot linked to
+                it (if the `with_ip` parameter is set to True). 
+            `int`: The ID of the WT parent. 
         """
         parent_id = self.part_of_id
         if not parent_id:
             return False
         parent = Biosample(parent_id)
         if parent.wild_type:
-            return parent.id
+            if with_ip and parent.immunoblot_ids:
+                return parent.id
+            elif not with_ip:
+                return parent.id
         return parent.find_first_wt_parent()        
-   
-            
-            
-            
 
     def get_latest_library(self):
         """
