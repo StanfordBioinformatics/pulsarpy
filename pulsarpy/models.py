@@ -719,7 +719,7 @@ class Biosample(Model):
                 return parent.id
             elif not with_ip:
                 return parent.id
-        return parent.find_first_wt_parent()        
+        return parent.find_first_wt_parent(with_ip=with_ip)        
 
     def get_latest_library(self):
         """
