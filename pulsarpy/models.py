@@ -658,6 +658,8 @@ class AntibodyPurification(Model):
 
 class Barcode(Model):
     MODEL_ABBR = "BC"
+    FKEY_MAP = {}
+    FKEY_MAP["sequencing_library_prep_kit_id"] = "SequencingLibraryPrepKit"
 
 
 class Biosample(Model):
