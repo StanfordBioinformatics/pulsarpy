@@ -981,8 +981,8 @@ class Library(Model):
             slpk_id = SequencingLibraryPrepKit.replace_name_with_id(payload[slpk_attr_name])
             payload[slpk_attr_name] = slpk_id
            
-            index1_id = Barcode.find_by(payload={slpk_attr_name: slpk_id, index_number=1}, "sequence": index1, required=True)
-            index2_id = Barcode.find_by(payload={slpk_attr_name: slpk_id, index_number=2, "sequence": index2 }, required=True)
+            index1_id = Barcode.find_by(payload={slpk_attr_name: slpk_id, "index_number": 1, "sequence": index1}, require=True)["id"]
+            index2_id = Barcode.find_by(payload={slpk_attr_name: slpk_id, "index_number": 2, "sequence": index2}, require=True)["id"]
             # Ensure that PairedBarcode for this index combo already exists:
             pbc_payload = {"index1_id": index1_id, "index2_id": index2_id, slpk_attr_name: slpk_id}
             pbc_exists = PairedBarcode.find_by(payload=pbc_payload)
@@ -990,7 +990,7 @@ class Library(Model):
                 pbc_exists = PairedBarcode.post(payload=pbc_payload)
             pbc_id = pbc_exists["id"]
             payload[paired_bc_id_attr_name] = pbc_id
-        return Model.post(cls=cls, payload=payload)
+        return super().post(payload=payload)
 
     def get_barcode_sequence(self):
         if self.barcode_id:
