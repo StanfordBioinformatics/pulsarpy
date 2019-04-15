@@ -774,6 +774,8 @@ class BatchItem(Model):
     FKEY_MAP["biosample_id"] = "Biosample"
     FKEY_MAP["batch_id"] = "Batch"
     FKEY_MAP["concentration_unit_id"] = "Unit"
+    FKEY_MAP["concentration_unit_id"] = "Unit"
+    FKEY_MAP["library_id"] = "Library"
 
 class ChipseqExperiment(Model):
     MODEL_ABBR = "CS"
@@ -1026,6 +1028,7 @@ class SequencingRequest(Model):
     MODEL_ABBR = "SREQ"
     FKEY_MAP = {}
     FKEY_MAP["concentration_unit_id"] = "Unit"
+    FKEY_MAP["library_ids"] = "Library"
     FKEY_MAP["sequencing_platform_id"] = "SequencingPlatform"
     FKEY_MAP["sequencing_center_id"] = "SequencingCenter"
     FKEY_MAP["submitted_by_id"] = "User"
