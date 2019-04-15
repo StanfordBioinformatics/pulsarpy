@@ -674,7 +674,6 @@ class Biosample(Model):
     FKEY_MAP["crispr_modification_id"] = "CrisprModification"
     FKEY_MAP["donor_id"] = "Donor"
     FKEY_MAP["immunoblot_ids"] = "Donor"
-    FKEY_MAP["library_prototype_id"] = "Library"
     FKEY_MAP["owner_id"] = "Owner"
     FKEY_MAP["part_of_id"] = "Biosample"
     FKEY_MAP["pooled_from_ids"] = "Biosample"
@@ -765,6 +764,7 @@ class Batch(Model):
     FKEY_MAP["user_id"] = "User"
     FKEY_MAP["analyst_id"] = "User"
     FKEY_MAP["batch_item_ids"] = "Batch"
+    FKEY_MAP["library_prototype_id"] = "Library"
 
 class BatchItem(Model):
     MODEL_ABBR = "CBI"
