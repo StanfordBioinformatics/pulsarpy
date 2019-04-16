@@ -656,6 +656,13 @@ class Antibody(Model):
 class AntibodyPurification(Model):
     MODEL_ABBR = "AP"
 
+class Atacseq(Model):
+    MODEL_ABBR = "AS"
+    FKEY_MAP = {}
+    FKEY_MAP["biosample_id"] = "Biosample"
+    FKEY_MAP["document_ids"] = "Document"
+    FKEY_MAP["replicate_ids"] = "Library"
+
 
 class Barcode(Model):
     MODEL_ABBR = "BC"
