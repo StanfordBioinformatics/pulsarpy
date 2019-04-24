@@ -40,6 +40,9 @@ def get_parser():
     parser.add_argument("--skip-dups", action="store_true", help="""
       If an attempt to POST a duplicate record is made, the server will respond with a ActiveRecord::RecordNotUnique
       exception. Including this flag indicates to catch this exception and skip on to the next record to POST.""")
+    parser.add_argument("-u", "--upstream-ids", action="store_true", help="""
+      If patching records and you are providing the record identidifers using the value of a records
+      upstream_identifier attribute, set this to True.""")
  
     return parser
 
@@ -49,6 +52,7 @@ def main():
     args = parser.parse_args()
     skip_dups = args.skip_dups
     infile = args.infile
+    upstream_ids = args.upstream_ids
     model = getattr(models, args.model)
     model_attrs = models.get_model_attrs(model.__name__)
     patch = args.patch
@@ -93,7 +97,10 @@ def main():
         if patch:
             rec_id = payload[RECORD_ID_FIELD]
             payload.pop(RECORD_ID_FIELD)
-            rec = model(rec_id)
+            if upstream_ids:
+                rec = model(upstream=rec_id)
+            else:
+                rec = model(rec_id)
             res = rec.patch(payload=payload, append_to_arrays=append_to_arrays)
         else:
             try:

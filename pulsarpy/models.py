@@ -311,7 +311,7 @@ class Model(metaclass=Meta):
             return response.json()
         elif upstream:
             rec_json = self.__class__.find_by({"upstream_identifier": upstream}, require=True)
-            self.record_url = self.__class__.get_record_url(rec_json.id)
+            self.record_url = self.__class__.get_record_url(rec_json["id"])
         return rec_json
 
     @classmethod
@@ -642,6 +642,8 @@ class Model(metaclass=Meta):
             filename: `str`. The output file name.
         """
         fout = open(filename,'w')
+        if not str(response.status_code).startswith("2"):
+            Model.debug_logger.debug(response.text)
         fout.write(response.text)
         fout.close()
 
@@ -1006,7 +1008,7 @@ class Library(Model):
         if self.barcode_id:
             return Barcode(self.barcode_id).sequence
         elif self.paired_barcode_id:
-            return PairedBarcode(self.paired_barcode_id).sequence
+            return PairedBarcode(self.paired_barcode_id).sequence()
         return
 
 
@@ -1020,7 +1022,9 @@ class NucleicAcidTerm(Model):
 
 class PairedBarcode(Model):
     MODEL_ABBR = "PBC"
-
+    
+    def sequence(self):
+        return Barcode(self.index1_id).sequence + "-" + Barcode(self.index2_id).sequence
 
 class Plate(Model):
     MODEL_ABBR = "PL"
