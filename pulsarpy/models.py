@@ -683,6 +683,7 @@ class Biosample(Model):
     FKEY_MAP["crispr_modification_id"] = "CrisprModification"
     FKEY_MAP["donor_id"] = "Donor"
     FKEY_MAP["immunoblot_ids"] = "Donor"
+    FKEY_MAP["library_ids"] = "Library"
     FKEY_MAP["owner_id"] = "Owner"
     FKEY_MAP["part_of_id"] = "Biosample"
     FKEY_MAP["pooled_from_ids"] = "Biosample"
