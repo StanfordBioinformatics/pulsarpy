@@ -580,6 +580,15 @@ class Model(metaclass=Meta):
     def prepost_hooks(cls, payload):
         return payload
 
+    @classmethod
+    def pre_post(cls, payload):
+        """
+        This class method should be implemented in subclasses only when there is sub-class specific
+        logic that needs to occur prior to using the generalized post class method defined below in
+        this class.
+        """
+        return payload
+
 
     @classmethod
     def post(cls, payload):
@@ -597,6 +606,7 @@ class Model(metaclass=Meta):
         """
         if not isinstance(payload, dict):
             raise ValueError("The 'payload' parameter must be provided a dictionary object.")
+        payload = cls.pre_post(payload)
         payload = cls.set_id_in_fkeys(payload)
         payload = cls.check_boolean_fields(payload)
         payload = cls.add_model_name_to_payload(payload)
@@ -950,6 +960,7 @@ class Library(Model):
     MODEL_ABBR = "L"
     FKEY_MAP = {}
     # belongs_to/ has_one
+    FKEY_MAP["atacseq_id"] = "Atacseq"
     FKEY_MAP["barcode_id"] = "Barcode"
     FKEY_MAP["biosample_id"] = "Biosample"
     FKEY_MAP["concentration_unit_id"] = "Unit"
@@ -967,7 +978,7 @@ class Library(Model):
     FKEY_MAP["document_ids"] = "Document"
 
     @classmethod
-    def post(cls, payload):
+    def pre_post(cls, payload):
         """
         A wrapper over Model.post() that handles the case where a Library has a PairedBarcode
         and the user may have supplied the PairedBarcode in the form of index1-index2, i.e. 
@@ -1003,7 +1014,7 @@ class Library(Model):
                 pbc_exists = PairedBarcode.post(payload=pbc_payload)
             pbc_id = pbc_exists["id"]
             payload[paired_bc_id_attr_name] = pbc_id
-        return super().post(payload=payload)
+        return payload
 
     def get_barcode_sequence(self):
         if self.barcode_id:
