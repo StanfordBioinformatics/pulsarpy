@@ -1026,6 +1026,7 @@ class PairedBarcode(Model):
     FKEY_MAP = {}
     FKEY_MAP["index1_id"] = "Barcode"
     FKEY_MAP["index2_id"] = "Barcode"
+    FKEY_MAP["sequencing_library_prep_kit_id"] = "SequencingLibraryPrepKit"
     
     def sequence(self):
         return Barcode(self.index1_id).sequence + "-" + Barcode(self.index2_id).sequence
