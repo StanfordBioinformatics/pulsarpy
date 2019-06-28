@@ -1023,6 +1023,9 @@ class NucleicAcidTerm(Model):
 
 class PairedBarcode(Model):
     MODEL_ABBR = "PBC"
+    FKEY_MAP = {}
+    FKEY_MAP["index1_id"] = "Barcode"
+    FKEY_MAP["index2_id"] = "Barcode"
     
     def sequence(self):
         return Barcode(self.index1_id).sequence + "-" + Barcode(self.index2_id).sequence
