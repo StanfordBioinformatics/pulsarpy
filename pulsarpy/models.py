@@ -564,6 +564,8 @@ class Model(metaclass=Meta):
             if not val:
                continue
             if key.endswith("_id"):
+                if key == "addgene_id":
+                    continue
                 model = getattr(THIS_MODULE, cls.FKEY_MAP[key])
                 rec_id = model.replace_name_with_id(name=val)
                 payload[key] = rec_id
