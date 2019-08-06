@@ -13,7 +13,6 @@ Scripts
    
     scripts/get_id_from_name.rst
     scripts/get_missing.rst
-    scripts/submit_to_dcc.rst
     scripts/tab_import.rst
 
 Client API Modules
